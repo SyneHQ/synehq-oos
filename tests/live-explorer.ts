@@ -14,6 +14,7 @@ async function request(path: string, method = "GET", input?: unknown, form = fal
     method,
     redirect: "manual",
     headers: {
+      Host: new URL(origin).host,
       Origin: origin,
       Cookie: [...cookies].map(([k, v]) => `${k}=${v}`).join("; "),
       ...(input === undefined
@@ -49,7 +50,7 @@ async function api(path: string, method = "GET", data?: unknown) {
   );
   return res.body;
 }
-async function completed(initial: any) {
+async function completed(initial: any, requireResult = true) {
   let result = initial;
   const deadline = Date.now() + 45000;
   while (["queued", "running"].includes(result.status) && Date.now() < deadline) {
@@ -57,7 +58,7 @@ async function completed(initial: any) {
     result = await api(`/api/query/${result.operationId}`);
   }
   assert.equal(result.status, "succeeded", JSON.stringify(result));
-  assert.ok(result.result, JSON.stringify(result));
+  if (requireResult) assert.ok(result.result, "The query has no result.");
   return result;
 }
 const accountPath = join(runtime, "owner-fixture.json");
@@ -92,23 +93,29 @@ const ca = readFileSync(join(fixture, "tls", "ca.crt"), "utf8");
 const connections = (await api("/api/connections")).connections;
 for (const engine of ["postgres", "mysql"] as const) {
   const label = engine === "postgres" ? "PostgreSQL fixture" : "MySQL fixture";
-  const connection =
-    connections.find((c: any) => c.label === label) ??
-    (
+  let connection = connections.find((c: any) => c.label === label);
+  if (!connection) {
+    const draft = await api("/api/connections/test", "POST", {
+      label,
+      engine,
+      host: "127.0.0.1",
+      port: engine === "postgres" ? 55432 : 53306,
+      database: "oos",
+      username: "oos",
+      password: credentials[engine],
+      tlsMode: "verify-full",
+      tlsCa: ca,
+      readOnly: false,
+    });
+    await completed(draft, false);
+    connection = (
       await api("/api/connections", "POST", {
-        label,
-        engine,
-        host: "127.0.0.1",
-        port: engine === "postgres" ? 55432 : 53306,
-        database: "oos",
-        username: "oos",
-        password: credentials[engine],
-        tlsMode: "verify-full",
-        tlsCa: ca,
-        readOnly: false,
+        draftId: draft.draftId,
+        operationId: draft.operationId,
       })
     ).connection;
-  assert.equal((await api(`/api/connections/${connection.id}/test`, "POST")).ok, true);
+  }
+  await completed(await api(`/api/connections/${connection.id}/test`, "POST"), false);
   console.log(`${engine}: verified TLS connection passed.`);
   const target = {
     connectionId: connection.id,

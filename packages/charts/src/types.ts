@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 export interface ResultChartColumn {
   name: string;
   dataType?: string;
@@ -18,6 +20,15 @@ export interface QueryResultChartProps {
   complete: boolean;
   color?: string;
   className?: string;
+  renderSelect?: (props: ResultChartSelectProps) => ReactNode;
+}
+
+export interface ResultChartSelectProps {
+  label: string;
+  value: string;
+  options: readonly { value: string; label: string }[];
+  onValueChange: (value: string) => void;
+  disabled?: boolean;
 }
 
 export interface ResultChartPoint {

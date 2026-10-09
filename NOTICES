@@ -21,6 +21,27 @@ described below.
 The README cover is SyneHQ project artwork. It is an illustration, not a
 product screenshot.
 
+The connection form adapts the main SyneHQ engine picker, field catalog,
+and test-before-save flow at the same revision. The source paths and Git
+blobs are recorded in docs/connection-form-source.md.
+
+Database names and logos
+-----------------------
+
+The PostgreSQL, MySQL, ClickHouse, MongoDB, SQLite, and Oracle names and
+logos belong to their respective owners. This repository's Apache-2.0
+license does not grant rights to those marks. Their source URLs and asset
+hashes are recorded in docs/database-logos.md and docs/database-logo-assets.json.
+The images identify database connection types and do not imply endorsement.
+
+Login photograph
+----------------
+
+apps/web/public/auth-portrait.jpg is the reference photograph selected by
+the project owner from Replit's public login page. The photograph retains
+its third-party rights and is not covered by this repository's Apache-2.0
+license. The source URL and asset hash are recorded in docs/login-visual.md.
+
 Radix Primitives helper adaptations
 ----------------------------------
 
@@ -104,3 +125,11 @@ Kelvo
 Kelvo is a separate SyneHQ service distributed under Apache License 2.0.
 Its source, binaries, dependency notices, and release record remain separate
 from this web application. See https://github.com/SyneHQ/kelvo-go.
+
+Container packaging
+-------------------
+The container uses Distroless Debian 12, Node.js, Tini, and Kelvo. These projects and their dependencies retain their original license terms.
+
+The seccomp profile derives from Moby profiles (Apache-2.0), revision 2ceae35d351c156cb5a8efc0fdc4a08cf94569d8, seccomp/default.json. The profile permits clone3 for pre-start query cgroup placement. The worker applies its own restrictions after placement.
+
+Source: https://github.com/moby/profiles/tree/2ceae35d351c156cb5a8efc0fdc4a08cf94569d8

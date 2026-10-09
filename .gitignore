@@ -12,6 +12,8 @@ playwright-report/
 /runtime/
 /bin/
 *.tsbuildinfo
+__pycache__/
+*.pyc
 owner-fixture.json
 browser-cookies.json
 credentials.json
@@ -28,3 +30,4 @@ service-signing.json
 ._*
 apps/web/src/generated/
 apps/web/public/monaco/
+apps/web/out/

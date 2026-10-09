@@ -13,6 +13,7 @@ import {
   type OperationRequest,
   type OperationResponse,
   type Parameter,
+  isMutatingOperation,
 } from "@synehq-oos/kelvo-client";
 import type { QueryOperation, QueryTarget } from "@synehq-oos/explorer-contracts";
 import { runtimeIdentity } from "../crypto/keyring";
@@ -22,6 +23,7 @@ import {
   createQueryApproval,
   getExecution,
   getInstance,
+  getConnection,
   listActiveExecutions,
   recordAdmissionRejection,
   recordExecutionReceipt,
@@ -32,6 +34,8 @@ import {
   type OwnerIdentity,
 } from "../store";
 import { kelvoClient } from "./config";
+import { mongoRequest } from "./mongodb";
+import { removeSnapshot, snapshotBindingSchema } from "./sqlite-files";
 
 export function queryRequest(
   target: QueryTarget,
@@ -53,10 +57,46 @@ export function queryRequest(
         : { query: { sql, ...(parameters ? { parameters } : {}) } },
   };
 }
-export async function prepareQuery(owner: OwnerIdentity, target: QueryTarget, sql: string) {
+export async function connectionQueryRequest(
+  owner: OwnerIdentity,
+  target: QueryTarget,
+  text: { sql?: string; command?: string },
+  mode: "read" | "write",
+  operationId: string,
+  approvalId?: string,
+): Promise<OperationRequest> {
+  const connection = await getConnection(owner, target.connectionId);
+  if (connection.engine === "mongodb") {
+    if (text.sql !== undefined || text.command === undefined)
+      throw new StoreError(400, "MongoDB requires a native JSON command.");
+    return mongoRequest(target, text.command, mode, operationId, approvalId);
+  }
+  if (text.command !== undefined || text.sql === undefined)
+    throw new StoreError(400, "This database requires SQL text.");
+  if (connection.engine === "sqlite" && target.schema !== null)
+    throw new StoreError(400, "SQLite uses the main database without a schema target.");
+  const request = queryRequest(target, text.sql, mode, operationId, approvalId);
+  if (mode === "write" && connection.engine === "clickhouse")
+    request.spec.statement!.transaction = "autocommit";
+  return request;
+}
+
+export async function prepareQuery(
+  owner: OwnerIdentity,
+  target: QueryTarget,
+  sql: string,
+  command?: string,
+) {
   const operationId = randomUUID(),
     approvalId = randomUUID();
-  const request = queryRequest(target, sql, "write", operationId, approvalId);
+  const request = await connectionQueryRequest(
+    owner,
+    target,
+    command === undefined ? { sql } : { command },
+    "write",
+    operationId,
+    approvalId,
+  );
   const digest = operationDigest(request);
   const instance = await getInstance();
   const approval = await createQueryApproval(owner, {
@@ -65,7 +105,7 @@ export async function prepareQuery(owner: OwnerIdentity, target: QueryTarget, sq
     executionEpoch: instance.executionEpoch,
     operationId,
     approvalId,
-    sql,
+    sql: command ?? sql,
   });
   return {
     operationId,
@@ -89,7 +129,7 @@ export async function startOperation(
   approvalToken?: string,
   admissionRetries = 2,
 ): Promise<QueryOperation> {
-  if (request.kind !== "statement.execute" && !request.idempotency_key)
+  if (!isMutatingOperation(request.kind) && !request.idempotency_key)
     request = { ...request, idempotency_key: id };
   for (const active of await listActiveExecutions(owner))
     await readOperation(owner, active.operationId, { includeResult: false, timeoutMs: 2000 });
@@ -107,10 +147,9 @@ export async function startOperation(
     connection_id: target.connectionId,
     operation: request.kind,
     request_sha256: digest,
-    authorization:
-      request.kind === "statement.execute"
-        ? { kind: "approved_change", approval_id: request.approval_id!, approved_sha256: digest }
-        : { kind: "read" },
+    authorization: isMutatingOperation(request.kind)
+      ? { kind: "approved_change", approval_id: request.approval_id!, approved_sha256: digest }
+      : { kind: "read" },
   };
   const grant = signGrant(claims, identity.servicePrivateKeyPem);
   const { record } = await beginExecution(owner, {
@@ -119,14 +158,22 @@ export async function startOperation(
     operationDigest: digest,
     executionEpoch: instance.executionEpoch,
     requestJson: encodeOperation(request),
-    write: request.kind === "statement.execute",
+    write: isMutatingOperation(request.kind),
     ...(approvalToken ? { approvalToken } : {}),
     ...(request.approval_id ? { approvalId: request.approval_id } : {}),
     grantIssuedAt: now,
     grantExpiresAt: now + 300,
     grantDigest: sha256(grant),
     claimsJson: goJSON(claims),
-    sql: request.spec.query?.sql ?? request.spec.statement?.sql,
+    sql:
+      request.spec.query?.sql ??
+      request.spec.statement?.sql ??
+      (request.spec.native
+        ? JSON.stringify({
+            command: request.spec.native.command,
+            ...(request.spec.native.parameters[0].value as object),
+          })
+        : undefined),
   });
   if (record.admissionRejectionJson) return readOperation(owner, record.operationId);
   if (!(await claimExecutionDispatch(owner, record.operationId)))
@@ -144,7 +191,9 @@ export async function startOperation(
       }
       if (
         admissionRetries > 0 &&
-        (request.kind === "query.read" || request.kind === "metadata.inspect")
+        (request.kind === "query.read" ||
+          request.kind === "metadata.inspect" ||
+          request.kind === "native.read")
       ) {
         const nextId = randomUUID();
         return startOperation(
@@ -236,6 +285,17 @@ async function operationView(
     };
   const confirmed = await recordExecutionReceipt(owner, record.operationId, state);
   const status = confirmed.status as QueryOperation["status"];
+  if (
+    confirmed.fileSnapshotJson &&
+    confirmed.custodyCompletedAt &&
+    ["succeeded", "failed", "cancelled"].includes(status)
+  ) {
+    try {
+      removeSnapshot(snapshotBindingSchema.parse(JSON.parse(confirmed.fileSnapshotJson)));
+    } catch {
+      /* Retained custody prevents replay if cleanup must be repeated. */
+    }
+  }
   if (status !== "succeeded" || !includeResult)
     return {
       operationId: record.operationId,

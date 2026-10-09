@@ -45,6 +45,10 @@ export const getConnection = (owner: OwnerIdentity, id: string) =>
   appStore().getConnection(owner, id);
 export const createConnection = (owner: OwnerIdentity, input: ConnectionInput) =>
   appStore().createConnection(owner, input);
+export const createConnectionDraft = (owner: OwnerIdentity, input: ConnectionInput) =>
+  appStore().createConnectionDraft(owner, input);
+export const saveTestedConnection = (owner: OwnerIdentity, draftId: string, operationId: string) =>
+  appStore().saveTestedConnection(owner, draftId, operationId);
 export const updateConnection = (owner: OwnerIdentity, id: string, input: ConnectionUpdate) =>
   appStore().updateConnection(owner, id, input);
 export const deleteConnection = (owner: OwnerIdentity, id: string) =>
@@ -63,6 +67,14 @@ export const claimExecutionDispatch = (owner: OwnerIdentity, operationId: string
   appStore().claimExecutionDispatch(owner, operationId);
 export const authorizeExecution = (authority: ExecutionAuthority) =>
   appStore().authorizeExecution(authority);
+export const bindExecutionFileSnapshot = (authority: ExecutionAuthority, snapshotJson: string) =>
+  appStore().bindExecutionFileSnapshot(authority, snapshotJson);
+export const publishExecutionFile = <T>(
+  authority: ExecutionAuthority,
+  custody: ExecutionCustody,
+  snapshotJson: string,
+  publish: (authorityValidUntil: number) => Promise<T>,
+) => appStore().publishExecutionFile(authority, custody, snapshotJson, publish);
 export const getExecutionForResolver = (localId: string) =>
   appStore().getExecutionForResolver(localId);
 export const getExecutionByKelvoId = (remoteId: string) =>

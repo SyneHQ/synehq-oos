@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync } from "node:crypto";
-import { tableFromArrays, tableToIPC } from "apache-arrow";
+import { Null, Table, tableFromArrays, tableToIPC, vectorFromArray } from "apache-arrow";
 import {
   decodeResult,
   decimalString,
@@ -112,6 +112,19 @@ test("Arrow decoding requires complete framing and exact row count", () => {
   assert.throws(() => decodeResult(Buffer.concat([plain, Buffer.alloc(8)]), 2));
   assert.throws(() => decodeResult(plain, 3));
   assert.throws(() => decodeResult(bytes, 2));
+});
+
+test("Arrow Null columns preserve absent SQLite defaults", () => {
+  const table = new Table({
+    position: vectorFromArray(new Int32Array([1, 2])),
+    default_value: vectorFromArray([null, null], new Null()),
+  });
+  assert.equal(table.schema.fields[1].type.toString(), "Null");
+  const bytes = Buffer.from(tableToIPC(table, "stream"));
+  assert.deepEqual(decodeResult(bytes, 2).rows, [
+    [1, null],
+    [2, null],
+  ]);
 });
 
 test("decimal and timestamp display preserve exact low digits", () => {

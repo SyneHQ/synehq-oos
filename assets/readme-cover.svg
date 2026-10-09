@@ -2,38 +2,38 @@
   <title id="title">SyneHQ OOS</title>
   <desc id="desc">Your database, in your browser. A typographic cover for a personal database explorer. Product illustration.</desc>
   <defs>
-    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#eee6f3" stroke-width="1"/></pattern>
-    <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#faf7fc"/><stop offset="1" stop-color="#faf7fc" stop-opacity="0"/></linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#f2e4da" stroke-width="1"/></pattern>
+    <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fffaf6"/><stop offset="1" stop-color="#fffaf6" stop-opacity="0"/></linearGradient>
   </defs>
-  <rect width="1440" height="520" fill="#faf7fc"/>
+  <rect width="1440" height="520" fill="#fffaf6"/>
   <rect x="775" width="665" height="520" fill="url(#grid)"/>
   <rect x="720" width="260" height="520" fill="url(#fade)"/>
-  <rect x="64" y="60" width="6" height="25" fill="#79569b"/>
-  <text x="86" y="80" fill="#715980" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2.5">SYNEHQ OOS</text>
-  <text x="62" y="196" fill="#35243f" font-family="Arial, Helvetica, sans-serif" font-size="60" font-weight="700" letter-spacing="-2">Your database,</text>
-  <text x="62" y="268" fill="#35243f" font-family="Arial, Helvetica, sans-serif" font-size="60" font-weight="700" letter-spacing="-2">in your browser.</text>
-  <text x="66" y="326" fill="#9683a3" font-family="Arial, Helvetica, sans-serif" font-size="22">Tables. Schemas. Relationships. SQL.</text>
-  <path d="M66 403 H717" stroke="#ded0e8"/>
-  <text x="66" y="443" fill="#9683a3" font-family="Arial, Helvetica, sans-serif" font-size="15">A personal explorer, powered by Kelvo.</text>
-  <text x="1325" y="468" fill="#a891b6" font-family="Arial, Helvetica, sans-serif" font-size="13" letter-spacing="1.5" text-anchor="end">PERSONAL DATABASE EXPLORER</text>
-  <g fill="none" stroke="#79569b" stroke-width="2">
+  <rect x="64" y="60" width="6" height="25" fill="#ee4b08"/>
+  <text x="86" y="80" fill="#b54a22" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="2.5">SYNEHQ OOS</text>
+  <text x="62" y="196" fill="#30241f" font-family="Arial, Helvetica, sans-serif" font-size="60" font-weight="700" letter-spacing="-2">Your database,</text>
+  <text x="62" y="268" fill="#30241f" font-family="Arial, Helvetica, sans-serif" font-size="60" font-weight="700" letter-spacing="-2">in your browser.</text>
+  <text x="66" y="326" fill="#8c7569" font-family="Arial, Helvetica, sans-serif" font-size="22">Tables. Schemas. Relationships. SQL.</text>
+  <path d="M66 403 H717" stroke="#ead9cd"/>
+  <text x="66" y="443" fill="#8c7569" font-family="Arial, Helvetica, sans-serif" font-size="15">A personal explorer, powered by Kelvo.</text>
+  <text x="1325" y="468" fill="#a98570" font-family="Arial, Helvetica, sans-serif" font-size="13" letter-spacing="1.5" text-anchor="end">PERSONAL DATABASE EXPLORER</text>
+  <g fill="none" stroke="#ee4b08" stroke-width="2">
     <path d="M995 174 H1048 V295 H1120"/>
-    <circle cx="995" cy="174" r="5" fill="#faf7fc"/>
-    <circle cx="1120" cy="295" r="5" fill="#faf7fc"/>
+    <circle cx="995" cy="174" r="5" fill="#fffaf6"/>
+    <circle cx="1120" cy="295" r="5" fill="#fffaf6"/>
   </g>
   <g font-family="Arial, Helvetica, sans-serif">
-    <rect x="826" y="110" width="170" height="177" rx="4" fill="#fff" stroke="#ded0e8"/>
-    <path d="M826 155 H996" stroke="#ded0e8"/>
-    <rect x="843" y="127" width="10" height="10" fill="#79569b"/>
-    <text x="865" y="139" fill="#35243f" font-size="16" font-weight="700">Explore</text>
-    <text x="846" y="185" fill="#8b7499" font-size="15">Tables</text>
-    <text x="846" y="219" fill="#8b7499" font-size="15">Schemas</text>
-    <text x="846" y="253" fill="#8b7499" font-size="15">Relationships</text>
-    <rect x="1120" y="231" width="205" height="151" rx="4" fill="#fff" stroke="#ded0e8"/>
-    <path d="M1120 276 H1325" stroke="#ded0e8"/>
-    <text x="1140" y="259" fill="#35243f" font-size="16" font-weight="700">Query</text>
-    <text x="1140" y="307" fill="#79569b" font-family="monospace" font-size="16">SELECT</text>
-    <rect x="1140" y="324" width="125" height="5" rx="2" fill="#eee5f3"/>
-    <rect x="1140" y="343" width="83" height="5" rx="2" fill="#eee5f3"/>
+    <rect x="826" y="110" width="170" height="177" rx="4" fill="#fff" stroke="#ead9cd"/>
+    <path d="M826 155 H996" stroke="#ead9cd"/>
+    <rect x="843" y="127" width="10" height="10" fill="#ee4b08"/>
+    <text x="865" y="139" fill="#30241f" font-size="16" font-weight="700">Explore</text>
+    <text x="846" y="185" fill="#967666" font-size="15">Tables</text>
+    <text x="846" y="219" fill="#967666" font-size="15">Schemas</text>
+    <text x="846" y="253" fill="#967666" font-size="15">Relationships</text>
+    <rect x="1120" y="231" width="205" height="151" rx="4" fill="#fff" stroke="#ead9cd"/>
+    <path d="M1120 276 H1325" stroke="#ead9cd"/>
+    <text x="1140" y="259" fill="#30241f" font-size="16" font-weight="700">Query</text>
+    <text x="1140" y="307" fill="#ee4b08" font-family="monospace" font-size="16">SELECT</text>
+    <rect x="1140" y="324" width="125" height="5" rx="2" fill="#f6e8dd"/>
+    <rect x="1140" y="343" width="83" height="5" rx="2" fill="#f6e8dd"/>
   </g>
 </svg>

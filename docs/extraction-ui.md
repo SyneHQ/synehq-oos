@@ -7,6 +7,10 @@ The selected source checkout is read-only. The extracted explorer packages conta
 
 Result charts use a separate standalone Syne Charts module. The [chart record](chart-provenance.md) describes that module and its source.
 
+The [connection form record](connection-form-source.md) records the reused engine picker, fields, and test-before-save flow.
+The [database logo record](database-logos.md) identifies the six vendor PNG assets and their sources.
+The [MongoDB document view record](mongodb-document-view-source.md) records the adapted JSON list and exact-value handling.
+
 ## Copied and adapted source
 
 | Source path                                        | Source Git blob                            | Source SHA-256                                                     | Destination                                 | Change                                                                        |

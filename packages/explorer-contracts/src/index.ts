@@ -1,4 +1,5 @@
-export type DatabaseEngine = "postgres" | "mysql";
+import type { DatabaseEngine } from "./databases";
+export * from "./databases";
 export type TlsMode = "verify-full" | "disable";
 
 export interface OwnerSummary {
@@ -19,6 +20,9 @@ export interface ConnectionSummary {
   readOnly: boolean;
   revision: number;
   hasSecret: boolean;
+  authSource?: string;
+  serviceName?: string;
+  filePath?: string;
 }
 
 export interface QueryTarget {
@@ -81,7 +85,12 @@ export interface QueryOperation {
   result?: QueryResult;
   error?: string;
 }
+export interface ConnectionTestResult extends QueryOperation {
+  draftId?: string;
+  expiresAt?: string;
+}
 export const MAX_SQL_BYTES = 100_000;
+export const MAX_TABLE_WHERE_LENGTH = 4096;
 export const MAX_OPERATION_BYTES = 256 * 1024;
 export const DEFAULT_MAX_ROWS = 10_000;
 export const DEFAULT_MAX_RESULT_BYTES = 4 * 1024 * 1024;

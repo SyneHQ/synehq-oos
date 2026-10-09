@@ -5,10 +5,19 @@ export type OperationKind =
   | "connection.test"
   | "metadata.inspect"
   | "query.read"
-  | "statement.execute";
+  | "statement.execute"
+  | "native.read"
+  | "native.execute";
+export type JsonValue =
+  | null
+  | boolean
+  | string
+  | number
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 export interface Parameter {
-  type: "string" | "int64" | "bool" | "null";
-  value: string | boolean | null;
+  type: "string" | "int64" | "bool" | "null" | "json";
+  value: JsonValue;
 }
 export interface OperationRequest {
   version: 1;
@@ -19,6 +28,12 @@ export interface OperationRequest {
   spec: {
     query?: { sql: string; parameters?: Parameter[] };
     statement?: { sql: string; parameters?: Parameter[]; transaction: "required" | "autocommit" };
+    native?: {
+      provider: "mongodb";
+      command: string;
+      parameters: Parameter[];
+      return_result?: boolean;
+    };
     metadata?: {
       object: "tables" | "columns" | "primary_keys" | "foreign_keys" | "schemas";
       target: { catalog?: string; schema?: string; name?: string };
@@ -151,11 +166,38 @@ function parameters(values?: Parameter[]) {
       if (typeof p.value !== "boolean") fail();
     } else if (p.type === "null") {
       if (p.value !== null) fail();
+    } else if (p.type === "json") {
+      validateJson(p.value);
     } else fail();
     if (Buffer.byteLength(goJSON(p.value)) > 16_384) fail();
     return { type: p.type, value: p.value };
   });
 }
+
+function validateJson(value: JsonValue, depth = 0): void {
+  if (depth > 32) fail();
+  if (value === null || typeof value === "boolean") return;
+  if (typeof value === "string") {
+    if (!value.isWellFormed() || value.includes("\0")) fail();
+    return;
+  }
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value)) fail();
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) validateJson(item, depth + 1);
+    return;
+  }
+  if (typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype) fail();
+  for (const [key, item] of Object.entries(value)) {
+    text(key, 1024);
+    validateJson(item, depth + 1);
+  }
+}
+
+export const isMutatingOperation = (kind: OperationKind) =>
+  kind === "statement.execute" || kind === "native.execute";
 
 /** Match Go encoding/json, including HTML and Unicode line separator escaping. */
 export function goJSON(value: unknown): string {
@@ -198,6 +240,30 @@ export function encodeOperation(r: OperationRequest): string {
     const p = parameters(v.parameters);
     spec = {
       statement: { sql: v.sql, ...(p ? { parameters: p } : {}), transaction: v.transaction },
+    };
+  } else if (r.kind === "native.read" || r.kind === "native.execute") {
+    const value = r.spec.native;
+    if (
+      !value ||
+      Object.keys(r.spec).length !== 1 ||
+      value.provider !== "mongodb" ||
+      !validId(value.command) ||
+      !Array.isArray(value.parameters) ||
+      value.parameters.length !== 1 ||
+      value.parameters[0]?.type !== "json" ||
+      (r.kind === "native.execute"
+        ? !r.idempotency_key || !r.approval_id
+        : Boolean(r.approval_id || value.return_result))
+    )
+      fail();
+    const p = parameters(value.parameters);
+    spec = {
+      native: {
+        provider: "mongodb",
+        command: value.command,
+        parameters: p!,
+        ...(value.return_result ? { return_result: true } : {}),
+      },
     };
   } else if (r.kind === "metadata.inspect") {
     const v = r.spec.metadata;
@@ -314,7 +380,7 @@ export function verifyGrant(
     c.request_sha256 !== operationDigest(operation)
   )
     fail();
-  if (operation.kind === "statement.execute") {
+  if (isMutatingOperation(operation.kind)) {
     if (
       c.authorization.kind !== "approved_change" ||
       c.authorization.approval_id !== operation.approval_id ||
@@ -388,8 +454,8 @@ export function validateResponse(
   text(extended.provider_reference ?? "", 512, true);
   if (
     kind &&
-    ((kind !== "statement.execute" && v.effect !== "none") ||
-      (kind === "statement.execute" && v.outcome === "completed" && v.effect !== "committed"))
+    ((!isMutatingOperation(kind) && v.effect !== "none") ||
+      (isMutatingOperation(kind) && v.outcome === "completed" && v.effect !== "committed"))
   )
     fail();
   if (

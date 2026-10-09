@@ -12,6 +12,7 @@ import {
   operationDigest as kelvoOperationDigest,
   validateResponse,
   validateAdmissionRejection,
+  isMutatingOperation,
   type AdmissionRejection,
   type OperationRequest,
   type OperationResponse,
@@ -30,6 +31,7 @@ import {
 import { hashPassword, verifyPassword } from "../crypto/password";
 import { StoreError, unauthorized } from "./errors";
 import { configureMetadataClient } from "./database";
+import { connectionDraftSchema, connectionUpdateSchema } from "./connection-input";
 import type {
   AiSettingsInput,
   AiSettingsSummary,
@@ -59,35 +61,6 @@ const credentialsSchema = z
     tlsCa: z.string().max(16384).optional(),
     tlsClientCert: z.string().max(16384).optional(),
     tlsClientKey: z.string().max(16384).optional(),
-  })
-  .strict();
-const connectionSchema = z
-  .object({
-    label: z.string().trim().min(1).max(128),
-    engine: z.enum(["postgres", "mysql"]),
-    host: z
-      .string()
-      .trim()
-      .min(1)
-      .max(253)
-      .refine(
-        (host) => !/[\s/@?#\\\x00]/.test(host),
-        "Enter a hostname or IP address, without a URL or credentials.",
-      ),
-    port: z.number().int().min(1).max(65535),
-    database: z.string().trim().min(1).max(256),
-    username: z.string().max(256),
-    tlsMode: z
-      .literal("verify-full", {
-        errorMap: () => ({
-          message:
-            "This release requires verified TLS. Insecure database connections are not supported.",
-        }),
-      })
-      .default("verify-full"),
-    readOnly: z.boolean().default(true),
-    password: z.string().max(8192).optional(),
-    tlsCa: z.string().max(16384).optional(),
   })
   .strict();
 const scopeSchema = z
@@ -124,6 +97,9 @@ function summary(row: Connection): ConnectionSummary {
     readOnly: row.readOnly,
     revision: row.revision,
     hasSecret: row.credentials !== null,
+    ...(row.authSource ? { authSource: row.authSource } : {}),
+    ...(row.serviceName ? { serviceName: row.serviceName } : {}),
+    ...(row.filePath ? { filePath: row.filePath } : {}),
   };
 }
 function ownerSummary(row: { id: string; name: string; email: string }): OwnerSummary {
@@ -529,12 +505,21 @@ export class AppStore {
     owner: OwnerIdentity,
     id: string,
     expectedRevision?: number,
+    allowDraft = false,
   ): Promise<Connection> {
     idSchema.parse(id);
     const row = await db.connection.findFirst({
       where: { id, ownerId: owner.id, deletedAt: null },
     });
     if (!row) throw new StoreError(404, "Connection not found.");
+    if (row.draftExpiresAt && (!allowDraft || row.draftSessionId !== owner.sessionId))
+      throw new StoreError(404, "Connection not found.");
+    if (row.draftExpiresAt && row.draftExpiresAt <= this.clock())
+      throw new StoreError(
+        410,
+        "This connection test expired. Test the connection again.",
+        "CONNECTION_TEST_EXPIRED",
+      );
     if (expectedRevision !== undefined && row.revision !== expectedRevision)
       throw new StoreError(
         409,
@@ -546,9 +531,10 @@ export class AppStore {
 
   async listConnections(owner: OwnerIdentity): Promise<ConnectionSummary[]> {
     await this.checkOwner(this.db, owner);
+    await this.cleanupConnectionDrafts(owner);
     return (
       await this.db.connection.findMany({
-        where: { ownerId: owner.id, deletedAt: null },
+        where: { ownerId: owner.id, deletedAt: null, draftExpiresAt: null },
         orderBy: { label: "asc" },
       })
     ).map(summary);
@@ -560,7 +546,25 @@ export class AppStore {
   }
 
   async createConnection(owner: OwnerIdentity, input: ConnectionInput): Promise<ConnectionSummary> {
-    const body = connectionSchema.parse(input);
+    return this.createConnectionRecord(owner, input, false);
+  }
+
+  async createConnectionDraft(
+    owner: OwnerIdentity,
+    input: ConnectionInput,
+  ): Promise<ConnectionSummary & { expiresAt: string }> {
+    await this.cleanupConnectionDrafts(owner);
+    const connection = await this.createConnectionRecord(owner, input, true);
+    const row = await this.db.connection.findUniqueOrThrow({ where: { id: connection.id } });
+    return { ...connection, expiresAt: row.draftExpiresAt!.toISOString() };
+  }
+
+  private async createConnectionRecord(
+    owner: OwnerIdentity,
+    input: ConnectionInput,
+    draft: boolean,
+  ): Promise<ConnectionSummary> {
+    const body = connectionDraftSchema.parse(input);
     const instance = await this.getInstance(),
       id = randomUUID();
     const { password = "", tlsCa, ...fields } = body;
@@ -571,11 +575,113 @@ export class AppStore {
     );
     return this.transaction(async (tx) => {
       await this.checkOwner(tx, owner);
+      if (
+        draft &&
+        (await tx.connection.count({
+          where: { ownerId: owner.id, deletedAt: null, draftExpiresAt: { not: null } },
+        })) >= 32
+      )
+        throw new StoreError(
+          429,
+          "Too many connection tests are retained. Wait for them to expire or complete.",
+          "CONNECTION_TEST_LIMIT",
+        );
       const row = await tx.connection.create({
-        data: { id, ownerId: owner.id, ...fields, credentials },
+        data: {
+          id,
+          ownerId: owner.id,
+          ...fields,
+          credentials,
+          ...(draft
+            ? {
+                draftExpiresAt: new Date(this.clock().getTime() + 15 * 60 * 1000),
+                draftSessionId: owner.sessionId,
+              }
+            : {}),
+        },
       });
-      await audit(tx, owner.id, "connection.create", id);
+      await audit(tx, owner.id, draft ? "connection.test-draft.create" : "connection.create", id);
       return summary(row);
+    });
+  }
+
+  async saveTestedConnection(
+    owner: OwnerIdentity,
+    draftId: string,
+    operationId: string,
+  ): Promise<ConnectionSummary> {
+    return this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      const retained = await tx.connection.findFirst({
+        where: { id: idSchema.parse(draftId), ownerId: owner.id },
+      });
+      if (!retained || retained.deletedAt)
+        throw new StoreError(
+          404,
+          "This connection test no longer exists. Test the connection again.",
+          "CONNECTION_TEST_GONE",
+        );
+      const connection = await this.connection(tx, owner, draftId, undefined, true);
+      const execution = await tx.execution.findFirst({
+        where: {
+          operationId,
+          ownerId: owner.id,
+          sessionId: owner.sessionId,
+          authVersion: owner.authVersion,
+          connectionId: draftId,
+          connectionRevision: connection.revision,
+          database: connection.database,
+          status: "succeeded",
+          receiptJson: { not: null },
+          write: false,
+        },
+      });
+      if (
+        !execution ||
+        (JSON.parse(execution.requestJson) as OperationRequest).kind !== "connection.test"
+      )
+        throw new StoreError(
+          409,
+          "This exact connection has no successful test. Test it before saving.",
+          "CONNECTION_TEST_REQUIRED",
+        );
+      const instance = await tx.instance.findUniqueOrThrow({ where: { id: 1 } });
+      if (execution.executionEpoch !== instance.executionEpoch)
+        throw new StoreError(
+          409,
+          "The installation state changed. Test the connection again.",
+          "CONNECTION_TEST_REQUIRED",
+        );
+      if (!connection.draftExpiresAt) return summary(connection);
+      const saved = await tx.connection.update({
+        where: { id: draftId },
+        data: { draftExpiresAt: null, draftSessionId: null },
+      });
+      await audit(tx, owner.id, "connection.create", draftId);
+      return summary(saved);
+    });
+  }
+
+  async cleanupConnectionDrafts(owner: OwnerIdentity): Promise<void> {
+    await this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      const expired = await tx.connection.findMany({
+        where: { ownerId: owner.id, deletedAt: null, draftExpiresAt: { lte: this.clock() } },
+        take: 100,
+      });
+      for (const connection of expired) {
+        if (
+          await tx.execution.count({
+            where: { ...activeExecutions(owner.id), connectionId: connection.id },
+          })
+        )
+          continue;
+        await tx.connection.update({
+          where: { id: connection.id },
+          data: { deletedAt: this.clock(), credentials: null, revision: { increment: 1 } },
+        });
+        await audit(tx, owner.id, "connection.test-draft.expire", connection.id);
+      }
     });
   }
 
@@ -584,16 +690,34 @@ export class AppStore {
     id: string,
     input: ConnectionUpdate,
   ): Promise<ConnectionSummary> {
-    const update = connectionSchema
-      .partial()
-      .extend({ revision: z.number().int().positive() })
-      .strict()
-      .parse(input);
+    const update = connectionUpdateSchema.parse(input);
     const instance = await this.getInstance();
     return this.transaction(async (tx) => {
       await this.checkOwner(tx, owner);
       const current = await this.connection(tx, owner, id, update.revision);
-      const { revision, password, tlsCa, ...fields } = update;
+      const { revision, password, tlsCa, ...changes } = update;
+      if (changes.engine && changes.engine !== current.engine)
+        throw new StoreError(
+          400,
+          "Create and test a new connection to change its database engine.",
+        );
+      const {
+        id: _id,
+        revision: _revision,
+        hasSecret: _hasSecret,
+        ...previousFields
+      } = summary(current);
+      const {
+        password: _password,
+        tlsCa: _tlsCa,
+        ...normalized
+      } = connectionDraftSchema.parse({ ...previousFields, ...changes, password, tlsCa });
+      const fields = {
+        ...normalized,
+        authSource: normalized.authSource ?? null,
+        serviceName: normalized.serviceName ?? null,
+        filePath: normalized.filePath ?? null,
+      };
       const secretFields = { password, tlsCa };
       let credentials = current.credentials;
       if (Object.values(secretFields).some((value) => value !== undefined)) {
@@ -647,7 +771,7 @@ export class AppStore {
   ): Promise<ConnectionSummary & ConnectionCredentials> {
     return this.transaction(async (tx) => {
       await this.checkOwner(tx, owner);
-      const row = await this.connection(tx, owner, id, expectedRevision);
+      const row = await this.connection(tx, owner, id, expectedRevision, true);
       const instance = await tx.instance.findUniqueOrThrow({ where: { id: 1 } });
       if (!row.credentials) throw new StoreError(503, "Connection credentials are unavailable.");
       const credentials = credentialsSchema.parse(
@@ -668,7 +792,13 @@ export class AppStore {
   ): Promise<Connection> {
     scopeSchema.parse(scopeOnly(scope));
     await this.checkOwner(db, owner);
-    const row = await this.connection(db, owner, scope.connectionId, scope.connectionRevision);
+    const row = await this.connection(
+      db,
+      owner,
+      scope.connectionId,
+      scope.connectionRevision,
+      true,
+    );
     const instance = await db.instance.findUniqueOrThrow({ where: { id: 1 } });
     if (instance.executionEpoch !== scope.executionEpoch)
       throw new StoreError(
@@ -693,6 +823,8 @@ export class AppStore {
       expiresAt = new Date(this.clock().getTime() + APPROVAL_AGE_MS);
     await this.transaction(async (tx) => {
       const connection = await this.checkScope(tx, owner, scope);
+      if (connection.draftExpiresAt)
+        throw new StoreError(403, "Save a verified connection before approving a write.");
       if (connection.readOnly)
         throw new StoreError(403, "Enable writes for this connection before approving a write.");
       await tx.queryApproval.create({
@@ -798,7 +930,7 @@ export class AppStore {
       request.connection.id !== body.connectionId ||
       request.connection.database !== body.database ||
       (request.connection.schema ?? null) !== body.schema ||
-      (request.kind === "statement.execute") !== body.write ||
+      isMutatingOperation(request.kind) !== body.write ||
       (request.approval_id ?? null) !== (body.approvalId ?? null)
     )
       throw new StoreError(400, "The stored operation scope does not match the request.");
@@ -830,6 +962,20 @@ export class AppStore {
     };
     return this.transaction(async (tx) => {
       const connection = await this.checkScope(tx, owner, scope);
+      if (connection.draftExpiresAt && request.kind !== "connection.test")
+        throw new StoreError(403, "A connection test draft cannot execute queries.");
+      if (
+        connection.engine === "mongodb" &&
+        ["query.read", "statement.execute"].includes(request.kind)
+      )
+        throw new StoreError(400, "MongoDB requires a native command.");
+      if (connection.engine !== "mongodb" && request.spec.native)
+        throw new StoreError(400, "Native MongoDB commands require a MongoDB connection.");
+      if (
+        (connection.engine === "mongodb" || connection.engine === "sqlite") &&
+        body.schema !== null
+      )
+        throw new StoreError(400, "This database does not accept a SQL schema target.");
       const existing = await tx.execution.findUnique({ where: { operationId: body.operationId } });
       if (existing) {
         if (
@@ -993,21 +1139,73 @@ export class AppStore {
   }
 
   async authorizeExecution(authority: ExecutionAuthority): Promise<ExecutionRecord> {
+    return this.transaction((tx) => this.authorizeExecutionIn(tx, authority));
+  }
+
+  private async authorizeExecutionIn(
+    tx: Db,
+    authority: ExecutionAuthority,
+  ): Promise<ExecutionRecord> {
+    const row = await this.liveExecution(tx, authority.operationId);
+    if (
+      row.ownerId !== authority.id ||
+      row.authVersion !== authority.authVersion ||
+      row.sessionId !== authority.sessionId ||
+      row.connectionId !== authority.connectionId ||
+      row.connectionRevision !== authority.connectionRevision ||
+      row.executionEpoch !== authority.executionEpoch ||
+      row.operationDigest !== authority.operationDigest ||
+      row.database !== authority.database ||
+      row.schema !== authority.schema
+    )
+      throw new StoreError(403, "The operation authority does not match its request.");
+    return row;
+  }
+
+  async bindExecutionFileSnapshot(
+    authority: ExecutionAuthority,
+    snapshotJson: string,
+  ): Promise<ExecutionRecord> {
+    if (snapshotJson.length > 8192)
+      throw new StoreError(400, "The snapshot binding exceeds the limit.");
+    JSON.parse(snapshotJson);
     return this.transaction(async (tx) => {
-      const row = await this.liveExecution(tx, authority.operationId);
-      if (
-        row.ownerId !== authority.id ||
-        row.authVersion !== authority.authVersion ||
-        row.sessionId !== authority.sessionId ||
-        row.connectionId !== authority.connectionId ||
-        row.connectionRevision !== authority.connectionRevision ||
-        row.executionEpoch !== authority.executionEpoch ||
-        row.operationDigest !== authority.operationDigest ||
-        row.database !== authority.database ||
-        row.schema !== authority.schema
-      )
-        throw new StoreError(403, "The operation authority does not match its request.");
-      return row;
+      await tx.$executeRaw`UPDATE "Instance" SET "id" = "id" WHERE "id" = 1`;
+      const row = await this.authorizeExecutionIn(tx, authority);
+      const connection = await tx.connection.findUniqueOrThrow({ where: { id: row.connectionId } });
+      if (connection.engine !== "sqlite" || row.database !== "main" || row.schema !== null)
+        throw new StoreError(403, "Only a SQLite operation can retain a file snapshot.");
+      if (row.fileSnapshotJson) return row;
+      return tx.execution.update({
+        where: { operationId: row.operationId },
+        data: { fileSnapshotJson: snapshotJson },
+      });
+    });
+  }
+
+  async publishExecutionFile<T>(
+    authority: ExecutionAuthority,
+    custody: ExecutionCustody,
+    snapshotJson: string,
+    publish: (authorityValidUntil: number) => Promise<T>,
+  ): Promise<T> {
+    return this.transaction(async (tx) => {
+      // Acquire the metadata write lock before checking revocable authority.
+      await tx.$executeRaw`UPDATE "Instance" SET "id" = "id" WHERE "id" = 1`;
+      const row = await this.authorizeExecutionIn(tx, authority);
+      if (!row.write || row.fileSnapshotJson !== snapshotJson || !this.custodyMatches(row, custody))
+        throw new StoreError(403, "The publication does not match the approved operation.");
+      const session = await tx.ownerSession.findUniqueOrThrow({ where: { id: row.sessionId } });
+      const authorityValidUntil = Math.floor(
+        Math.min(
+          row.grantExpiresAt * 1000,
+          session.expiresAt.getTime(),
+          session.lastSeenAt.getTime() + SESSION_IDLE_MS,
+        ) / 1000,
+      );
+      const result = await publish(authorityValidUntil);
+      await audit(tx, row.ownerId, "sqlite.publication", row.operationId);
+      return result;
     });
   }
 

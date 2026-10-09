@@ -51,6 +51,7 @@ const surface = [
   "border-solid border-[length:var(--probe-menu-border-width)]",
   "border-[color:var(--probe-menu-border)]",
   "bg-[color:var(--probe-menu-background)]",
+  "[box-shadow:var(--probe-menu-shadow,none)]",
   "z-[var(--probe-menu-z-index)]",
   "[animation-duration:var(--probe-dropdown-menu-animation-duration)]",
   "[animation-timing-function:var(--probe-dropdown-menu-animation-ease)]",

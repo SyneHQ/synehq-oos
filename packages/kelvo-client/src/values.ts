@@ -102,8 +102,8 @@ export function timestampString(raw: bigint, unit: number, timezone?: string | n
   return `${iso}${places ? `.${fraction.toString().padStart(places, "0")}` : ""}${timezone ? "Z" : ""}`;
 }
 function cell(vector: Vector, index: number): CellValue {
-  if (!vector.isValid(index)) return null;
   const type = vector.type;
+  if (DataType.isNull(type) || !vector.isValid(index)) return null;
   if (DataType.isTimestamp(type)) {
     let row = index;
     for (const chunk of vector.data) {
@@ -129,21 +129,36 @@ function cell(vector: Vector, index: number): CellValue {
 export function decodeResult(bytes: Buffer, expectedRows: number): QueryResult {
   validateArrow(bytes, expectedRows);
   const table = tableFromIPC(bytes);
+  const mongoDocuments = table.schema.metadata.get("source_format") === "mongodb_canonical_ejson";
   if (
     table.numRows !== expectedRows ||
     table.numCols > 512 ||
     table.numRows * table.numCols > 250000
   )
     invalid();
+  if (
+    mongoDocuments &&
+    (table.schema.metadata.get("kelvo_document_format") !== "kelvo_provider_json_v1" ||
+      table.numCols !== 1 ||
+      table.schema.fields[0].name !== "document" ||
+      !DataType.isBinary(table.schema.fields[0].type))
+  )
+    invalid();
   const columns = table.schema.fields.map((field) => ({
     name: field.name,
-    dataType: field.type.toString(),
+    dataType: mongoDocuments ? "json" : field.type.toString(),
   }));
   const vectors = columns.map((_, index) => table.getChildAt(index)!);
   const rows: CellValue[][] = [];
   let decodedBytes = Buffer.byteLength(JSON.stringify(columns));
   for (let i = 0; i < table.numRows; i++) {
-    const row = vectors.map((vector) => cell(vector, i));
+    const row = vectors.map((vector) => {
+      if (!mongoDocuments) return cell(vector, i);
+      if (!vector.isValid(i)) return null;
+      const document = new TextDecoder("utf-8", { fatal: true }).decode(vector.get(i));
+      JSON.parse(document);
+      return document;
+    });
     decodedBytes += Buffer.byteLength(JSON.stringify(row));
     if (decodedBytes > 16 * 1024 * 1024) throw new Error("The decoded result exceeds the limit.");
     rows.push(row);

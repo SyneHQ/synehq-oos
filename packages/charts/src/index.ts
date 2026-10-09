@@ -7,6 +7,7 @@ export {
 } from "./result-data";
 export type {
   QueryResultChartProps,
+  ResultChartSelectProps,
   ResultChartColumn,
   ResultChartCell,
   ResultChartConfig,

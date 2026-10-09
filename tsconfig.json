@@ -16,6 +16,7 @@
     "paths": { "@/*": ["./apps/web/src/*"] }
   },
   "include": [
+    "deploy/**/*.ts",
     "apps/**/*.ts",
     "apps/**/*.tsx",
     "packages/**/*.ts",

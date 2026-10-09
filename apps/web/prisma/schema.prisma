@@ -64,6 +64,11 @@ model Connection {
   readOnly          Boolean   @default(true)
   revision          Int       @default(1)
   credentials       String?
+  authSource        String?
+  serviceName       String?
+  filePath          String?
+  draftExpiresAt    DateTime?
+  draftSessionId    String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   deletedAt         DateTime?
@@ -110,6 +115,7 @@ model Execution {
   claimsJson         String
   receiptJson        String?
   admissionRejectionJson String?
+  fileSnapshotJson  String?
   kelvoOperationId   String?   @unique
   workerId           String?
   workerOwner        String?

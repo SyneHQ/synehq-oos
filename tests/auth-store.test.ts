@@ -37,6 +37,137 @@ const connectionInput: ConnectionInput = {
   readOnly: true,
 };
 
+test("connection drafts stay private and require the exact successful test receipt", async (t) => {
+  const f = await ownerFixture(t);
+  const draft = await f.store.createConnectionDraft(f.owner, connectionInput);
+  assert.deepEqual(await f.store.listConnections(f.owner), []);
+  await assert.rejects(f.store.getConnection(f.owner, draft.id), /not found/);
+  await assert.rejects(
+    f.store.saveTestedConnection(f.owner, draft.id, "missing"),
+    /no successful test/,
+  );
+  const secondSession = await f.store.authenticateOwner(f.owner.email, PASSWORD);
+  assert.ok(secondSession);
+  await assert.rejects(f.store.decryptConnection(secondSession, draft.id), /not found/);
+  const forbidden = await operation(f, draft.id, draft.revision);
+  await assert.rejects(f.store.beginExecution(f.owner, forbidden), /test/);
+  const request = await operation(f, draft.id, draft.revision, false, "connection.test");
+  await f.store.beginExecution(f.owner, request);
+  await f.store.claimExecutionDispatch(f.owner, request.operationId);
+  await f.store.setKelvoOperationId(
+    f.owner,
+    request.operationId,
+    "draft-test",
+    request.operationDigest,
+  );
+  await f.store.updateExecution(f.owner, request.operationId, { status: "unknown" });
+  await assert.rejects(
+    f.store.saveTestedConnection(f.owner, draft.id, request.operationId),
+    /no successful test/,
+  );
+  const receipt: OperationResponse = {
+    version: 1,
+    id: "draft-test",
+    request_sha256: request.operationDigest,
+    state: "completed",
+    receipt: {
+      version: 1,
+      operation_id: "draft-test",
+      request_sha256: request.operationDigest,
+      outcome: "completed",
+      effect: "none",
+    },
+  };
+  await f.store.recordExecutionReceipt(f.owner, request.operationId, receipt);
+  assert.equal(
+    (await f.store.saveTestedConnection(f.owner, draft.id, request.operationId)).id,
+    draft.id,
+  );
+  assert.equal((await f.store.listConnections(f.owner)).length, 1);
+  const expired = await f.store.createConnectionDraft(f.owner, {
+    ...connectionInput,
+    label: "Expired",
+  });
+  f.advance(16 * 60 * 1000);
+  await assert.rejects(
+    f.store.saveTestedConnection(f.owner, expired.id, request.operationId),
+    /expired/,
+  );
+  await f.store.cleanupConnectionDrafts(f.owner);
+  const cleaned = await f.db.connection.findUniqueOrThrow({ where: { id: expired.id } });
+  assert.ok(cleaned.deletedAt);
+  assert.equal(cleaned.credentials, null);
+  await assert.rejects(
+    f.store.saveTestedConnection(f.owner, expired.id, request.operationId),
+    (error: unknown) => {
+      assert.equal((error as { code?: string }).code, "CONNECTION_TEST_GONE");
+      return true;
+    },
+  );
+});
+
+test("file publication requires retained write authority, exact custody, and the same snapshot", async (t) => {
+  const f = await ownerFixture(t);
+  const connection = await f.store.createConnection(f.owner, {
+    label: "SQLite",
+    engine: "sqlite",
+    filePath: "sample.sqlite",
+    readOnly: false,
+  });
+  const request = await operation(
+    f,
+    connection.id,
+    connection.revision,
+    true,
+    "query.read",
+    "main",
+  );
+  const approval = await f.store.createQueryApproval(f.owner, {
+    ...request,
+    approvalId: request.approvalId!,
+    operationId: request.operationId,
+  });
+  await f.store.beginExecution(f.owner, { ...request, approvalToken: approval.token });
+  await f.store.claimExecutionDispatch(f.owner, request.operationId);
+  const custody = {
+    kelvoOperationId: "sqlite-write",
+    requestDigest: request.operationDigest,
+    grantDigest: request.grantDigest,
+    workerId: "application",
+    workerOwner: "owner-a",
+    claim: "claim-a",
+  };
+  await f.store.bindExecutionCustody(request.operationId, custody);
+  const authority = { ...f.owner, ...request };
+  const retained = JSON.stringify({ descriptor: "fixture" });
+  assert.equal(
+    (await f.store.bindExecutionFileSnapshot(authority, retained)).fileSnapshotJson,
+    retained,
+  );
+  assert.equal(
+    (await f.store.bindExecutionFileSnapshot(authority, "{}")).fileSnapshotJson,
+    retained,
+  );
+  let publishes = 0;
+  const publish = async () => {
+    publishes += 1;
+    return true;
+  };
+  await assert.rejects(
+    f.store.publishExecutionFile(authority, custody, "{}", publish),
+    /does not match/,
+  );
+  await assert.rejects(
+    f.store.publishExecutionFile(authority, { ...custody, claim: "other" }, retained, publish),
+    /does not match/,
+  );
+  assert.equal(await f.store.publishExecutionFile(authority, custody, retained, publish), true);
+  assert.equal(publishes, 1);
+  await f.store.revokeSession(f.owner.sessionId);
+  await assert.rejects(f.store.publishExecutionFile(authority, custody, retained, publish));
+  assert.equal(publishes, 1);
+});
+
 async function fixture(t: TestContext) {
   const directory = mkdtempSync(join(process.env.OOS_TEST_TMPDIR ?? tmpdir(), "oos-store-")),
     path = join(directory, "metadata.sqlite"),
@@ -91,6 +222,7 @@ async function operation(
   revision: number,
   write = false,
   readKind: "query.read" | "connection.test" | "metadata.inspect" = "query.read",
+  database = "fixture",
 ): Promise<BeginExecutionInput> {
   const instance = await f.store.getInstance(),
     operationId = randomUUID(),
@@ -98,7 +230,7 @@ async function operation(
   const request: OperationRequest = {
     version: 1,
     kind: write ? "statement.execute" : readKind,
-    connection: { id: connectionId, database: "fixture" },
+    connection: { id: connectionId, database },
     idempotency_key: write ? operationId : "",
     ...(approvalId ? { approval_id: approvalId } : {}),
     spec: write
@@ -133,7 +265,7 @@ async function operation(
     operationId,
     connectionId,
     connectionRevision: revision,
-    database: "fixture",
+    database,
     schema: null,
     executionEpoch: instance.executionEpoch,
     operationDigest: digest,

@@ -14,8 +14,14 @@ export function endpoint(handler: (...args: any[]) => Promise<Response>) {
     } catch (error) {
       if (error instanceof StoreError)
         return response({ error: error.message, code: error.code }, error.status);
-      if (error instanceof ZodError)
-        return response({ error: "Check the request fields and try again." }, 400);
+      if (error instanceof ZodError) {
+        const fieldErrors: Record<string, string> = {};
+        for (const issue of error.issues) {
+          const field = issue.path.join(".");
+          if (field && !fieldErrors[field]) fieldErrors[field] = issue.message;
+        }
+        return response({ error: "Check the request fields and try again.", fieldErrors }, 400);
+      }
       const code =
         error &&
         typeof error === "object" &&
@@ -98,10 +104,15 @@ export const sqlSchema = z
 export const querySchema = z
   .object({
     target: targetSchema,
-    sql: sqlSchema,
+    sql: sqlSchema.optional(),
+    command: sqlSchema.optional(),
     mode: z.enum(["read", "write"]).default("read"),
     operationId: z.string().uuid().optional(),
     approvalId: z.string().uuid().optional(),
     approvalToken: z.string().max(256).optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (input) => (input.sql !== undefined) !== (input.command !== undefined),
+    "Provide either SQL text or a native command.",
+  );

@@ -1,0 +1,15 @@
+.mongo-insert-dialog {
+  width: 760px;
+}
+.mongo-insert-dialog .sql-editor {
+  border: 1px solid var(--line);
+  min-height: 180px;
+}
+.mongo-insert-status {
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.mongo-insert-status code {
+  font-family: var(--font-mono);
+}

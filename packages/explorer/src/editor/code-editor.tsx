@@ -86,6 +86,17 @@ export function CodeEditor({
           },
         }),
       );
+    } else {
+      disposables.current.push(
+        editor.addAction({
+          id: "run-json-command",
+          label: "Run command",
+          keybindings: [m.KeyMod.CtrlCmd | m.KeyCode.Enter],
+          run: () => {
+            if (!live.current.readOnly) live.current.onRun?.(editor.getValue());
+          },
+        }),
+      );
     }
   };
   return (
