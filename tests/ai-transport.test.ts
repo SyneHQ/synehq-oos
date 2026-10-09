@@ -67,3 +67,33 @@ test("AI endpoint resolution blocks private and metadata addresses unless explic
     else process.env.OOS_AI_ALLOWED_HOSTS = previous;
   }
 });
+
+test("MongoDB AI drafts remove JSON fences without executing the command", async (t) => {
+  const command = '{"command":"find","collection":"orders","filter":{}}';
+  let requests = 0;
+  const server = createServer((request, response) => {
+    requests += 1;
+    request.resume();
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(
+      JSON.stringify({
+        choices: [
+          { finish_reason: "stop", message: { content: `\`\`\`json\n${command}\n\`\`\`` } },
+        ],
+      }),
+    );
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const endpoint = {
+    url: new URL(`http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`),
+    address: "127.0.0.1",
+    family: 4 as const,
+  };
+  assert.equal(await requestSqlDraft(endpoint, null, {}), command);
+  assert.equal(requests, 1);
+});

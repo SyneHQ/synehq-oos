@@ -3,6 +3,8 @@ export class ApiError extends Error {
     message: string,
     readonly status: number,
     readonly notSubmitted = false,
+    readonly fieldErrors: Record<string, string> = {},
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -29,6 +31,14 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
         : `Request failed (${response.status}).`,
       response.status,
       data.notSubmitted === true,
+      data.fieldErrors && typeof data.fieldErrors === "object"
+        ? Object.fromEntries(
+            Object.entries(data.fieldErrors)
+              .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+              .map(([key, value]) => [key, value.slice(0, 300)]),
+          )
+        : {},
+      typeof data.code === "string" ? data.code.slice(0, 100) : undefined,
     );
   return data as T;
 }

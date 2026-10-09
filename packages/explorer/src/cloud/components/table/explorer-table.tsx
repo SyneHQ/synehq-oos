@@ -385,6 +385,7 @@ export function ExplorerTable<TData>({
       )}
       {showToolBar && (
         <div
+          data-explorer-toolbar=""
           className={cn(
             "flex min-w-0 shrink-0 flex-wrap items-center gap-2",
             !children ? "justify-end" : "",

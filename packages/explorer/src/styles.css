@@ -94,3 +94,159 @@
   color: #8f829b;
   font-size: 11px;
 }
+
+.json-document-view {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  background: #fff;
+  color: var(--probe-text-primary, #303030);
+}
+.json-document-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.json-document-card {
+  border-bottom: 1px solid var(--line, #e8e8e8);
+}
+.json-document-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  background: #fafafa;
+}
+.json-document-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--probe-text-secondary, #686868);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.json-document-content {
+  padding: 7px 14px 10px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.json-field-line {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+}
+.json-field-key {
+  flex-shrink: 0;
+  max-width: 60%;
+  color: #4b5563;
+  white-space: pre-wrap;
+}
+.json-field-line > .json-punctuation {
+  white-space: pre;
+}
+.json-field-line > span:last-child {
+  min-width: 0;
+  white-space: pre-wrap;
+}
+.json-toggle,
+.json-toggle-space {
+  display: inline-flex;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 20px;
+}
+.json-toggle {
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  color: #777;
+  background: transparent;
+  cursor: pointer;
+}
+.json-toggle:hover,
+.json-show-fields:hover {
+  background: #f1f1f1;
+}
+.json-toggle:focus-visible,
+.json-document-disclosure:focus-visible,
+.json-show-fields:focus-visible {
+  outline: 2px solid var(--accent, #555);
+  outline-offset: 2px;
+}
+.json-nested {
+  margin-left: 18px;
+  padding-left: 7px;
+  border-left: 1px solid #ededed;
+}
+.json-closing,
+.json-root-brace {
+  color: #8a8a8a;
+}
+.json-closing {
+  padding-left: 18px;
+}
+.json-string {
+  color: #287344;
+}
+.json-number,
+.json-extended {
+  color: #245f9d;
+}
+.json-boolean {
+  color: #815390;
+}
+.json-null,
+.json-punctuation {
+  color: #828282;
+}
+.json-size {
+  color: #969696;
+  font-size: 10px;
+}
+.json-show-fields {
+  margin: 3px 0 3px 18px;
+  padding: 3px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--probe-text-link, #555);
+  font: inherit;
+  cursor: pointer;
+}
+.json-show-fields span {
+  color: #888;
+}
+.json-document-empty {
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--probe-text-secondary, #777);
+  font-size: 12px;
+}
+.json-document-empty strong {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+.json-document-empty p {
+  margin: 0;
+}
+.json-document-error {
+  color: #b42318;
+}
+.json-document-content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font: inherit;
+}

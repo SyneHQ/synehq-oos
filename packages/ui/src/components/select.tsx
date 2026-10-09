@@ -1,7 +1,11 @@
 "use client";
 
 import {
+  createContext,
   forwardRef,
+  useCallback,
+  useContext,
+  useState,
   type ComponentPropsWithoutRef,
   type ComponentRef,
   type ReactNode,
@@ -40,8 +44,22 @@ import { useFieldControl, type FieldControlProps } from "./field";
  *   </Select>
  * </Field>
  */
-const Select = SelectPrimitive.Root;
 export type SelectProps = ComponentPropsWithoutRef<typeof SelectPrimitive.Root>;
+
+const SelectTriggerContext = createContext<(node: HTMLButtonElement | null) => void>(() => {});
+const SelectPortalContext = createContext<HTMLElement | null>(null);
+
+function Select({ children, ...props }: SelectProps) {
+  const [trigger, setTrigger] = useState<HTMLButtonElement | null>(null);
+
+  return (
+    <SelectTriggerContext.Provider value={setTrigger}>
+      <SelectPortalContext.Provider value={trigger?.closest("dialog") ?? null}>
+        <SelectPrimitive.Root {...props}>{children}</SelectPrimitive.Root>
+      </SelectPortalContext.Provider>
+    </SelectTriggerContext.Provider>
+  );
+}
 
 const SelectGroup = SelectPrimitive.Group;
 export type SelectGroupProps = ComponentPropsWithoutRef<typeof SelectPrimitive.Group>;
@@ -111,10 +129,19 @@ const SelectTrigger = forwardRef<ComponentRef<typeof SelectPrimitive.Trigger>, S
   ) {
     const { required, ...control } = useFieldControl({ ...props, invalid });
     const isInvalid = control["aria-invalid"] === true;
+    const setTrigger = useContext(SelectTriggerContext);
+    const triggerRef = useCallback(
+      (node: HTMLButtonElement | null) => {
+        setTrigger(node);
+        if (typeof ref === "function") return ref(node);
+        if (ref) ref.current = node;
+      },
+      [ref, setTrigger],
+    );
 
     return (
       <SelectPrimitive.Trigger
-        ref={ref}
+        ref={triggerRef}
         aria-required={required || undefined}
         data-invalid={isInvalid || undefined}
         className={selectTrigger({ size, className })}
@@ -156,8 +183,8 @@ const SCROLL_BUTTON = [
 export type SelectContentProps = ComponentPropsWithoutRef<typeof SelectPrimitive.Content>;
 
 /**
- * The menu. Portalled, so it escapes any `overflow: hidden` ancestor, and at
- * least as wide as the trigger. Square, 1px-bordered, unshadowed.
+ * The menu uses a portal to leave scroll containers. Host tokens set its
+ * border, corner radius and shadow. Native dialogs contain their own portal.
  *
  * @example
  * <SelectContent>
@@ -166,23 +193,29 @@ export type SelectContentProps = ComponentPropsWithoutRef<typeof SelectPrimitive
  */
 const SelectContent = forwardRef<ComponentRef<typeof SelectPrimitive.Content>, SelectContentProps>(
   function SelectContent({ className, children, position = "popper", ...rest }, ref) {
+    const container = useContext(SelectPortalContext);
+
     return (
-      <SelectPrimitive.Portal>
+      // A native modal makes body portals inert. Keep this menu in the modal's top layer.
+      <SelectPrimitive.Portal container={container}>
         <SelectPrimitive.Content
           ref={ref}
           position={position}
           // 4px — the base grid. Radix needs a number here, not a token.
           sideOffset={4}
+          collisionPadding={8}
           className={cn(
             "relative overflow-hidden",
             "z-[var(--probe-menu-z-index)]",
             // The trigger width is only published in popper mode; fall back to
             // the menu's own minimum when a caller opts into item-aligned.
             "min-w-[max(var(--probe-menu-min-width),var(--radix-select-trigger-width,0px))]",
-            "max-h-[var(--radix-select-content-available-height)]",
+            "max-h-[min(320px,var(--radix-select-content-available-height))]",
+            "max-w-[var(--radix-select-content-available-width)]",
             "rounded-[var(--probe-menu-radius)]",
             "border-[length:var(--probe-menu-border-width)] border-[color:var(--probe-menu-border)]",
             "bg-[color:var(--probe-menu-background)]",
+            "[box-shadow:var(--probe-menu-shadow,none)]",
             className,
           )}
           {...rest}
@@ -227,6 +260,7 @@ const SelectItem = forwardRef<ComponentRef<typeof SelectPrimitive.Item>, SelectI
           "[transition:background-color_var(--probe-select-transition),color_var(--probe-select-transition)]",
           "data-[highlighted]:bg-[color:var(--probe-menu-item-background--hover)]",
           "data-[highlighted]:text-[color:var(--probe-menu-item-text--hover)]",
+          "data-[state=checked]:bg-[color:var(--probe-menu-item-background--selected)]",
           "data-[state=checked]:text-[color:var(--probe-menu-item-text--selected)]",
           "data-[disabled]:pointer-events-none",
           "data-[disabled]:text-[color:var(--probe-menu-item-text--disabled)]",
@@ -234,7 +268,9 @@ const SelectItem = forwardRef<ComponentRef<typeof SelectPrimitive.Item>, SelectI
         )}
         {...rest}
       >
-        <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+        <SelectPrimitive.ItemText className="min-w-0 flex-1 truncate">
+          {children}
+        </SelectPrimitive.ItemText>
         <SelectPrimitive.ItemIndicator className="ml-auto flex shrink-0 items-center">
           <Check
             aria-hidden="true"

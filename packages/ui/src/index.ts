@@ -26,6 +26,7 @@ export * from "./components/empty-state";
 export * from "./components/kbd";
 export * from "./components/popover";
 export * from "./components/select";
+export * from "./components/select-input";
 export * from "./components/sheet";
 export * from "./components/skeleton";
 export * from "./components/textarea";

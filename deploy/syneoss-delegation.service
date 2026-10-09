@@ -1,0 +1,13 @@
+[Unit]
+Description=Prepare the SyneHQ OOS query delegation
+Requires=syneoss.slice
+After=syneoss.slice
+Before=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/synehq-oos/prepare-cgroup.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=docker.service

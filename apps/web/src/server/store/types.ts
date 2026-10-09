@@ -1,12 +1,10 @@
-import type { OwnerSummary, ConnectionSummary } from "@synehq-oos/explorer-contracts";
+import type { OwnerSummary, ConnectionDraftInput } from "@synehq-oos/explorer-contracts";
 
 export interface OwnerIdentity extends OwnerSummary {
   authVersion: number;
   sessionId: string;
 }
-export type ConnectionInput = Omit<ConnectionSummary, "id" | "revision" | "hasSecret"> & {
-  password?: string;
-  tlsCa?: string;
+export type ConnectionInput = ConnectionDraftInput & {
   tlsClientCert?: string;
   tlsClientKey?: string;
 };

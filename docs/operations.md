@@ -223,7 +223,7 @@ install -d -m 0700 "$tls_archive"
 mv "$OOS_TLS_DIR/gateway.crt" "$OOS_TLS_DIR/gateway.key" "$tls_archive/"
 mv "$OOS_TLS_DIR/resolver.crt" "$OOS_TLS_DIR/resolver.key" "$tls_archive/"
 mv "$OOS_TLS_DIR/worker.crt" "$OOS_TLS_DIR/worker.key" "$tls_archive/"
-node --import tsx deploy/configure.ts
+node --import tsx deploy/configure-cli.ts
 openssl verify -CAfile "$OOS_TLS_DIR/ca.crt" "$OOS_TLS_DIR/gateway.crt" "$OOS_TLS_DIR/resolver.crt" "$OOS_TLS_DIR/worker.crt"
 ```
 

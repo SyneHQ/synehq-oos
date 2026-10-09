@@ -6,4 +6,6 @@ package-lock.json
 *.sqlite*
 *.db*
 apps/web/public/monaco/
+apps/web/out/
+dist/
 ._*

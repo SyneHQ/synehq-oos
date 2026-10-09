@@ -6,10 +6,12 @@ import type {
   SchemaTable,
   SchemaRelationship,
 } from "@synehq-oos/explorer-contracts";
+import { MAX_TABLE_WHERE_LENGTH } from "@synehq-oos/explorer-contracts";
 import { z } from "zod";
 import { getConnection, StoreError, type OwnerIdentity } from "../store";
 import { targetSchema } from "../http";
 import { awaitOperation, queryRequest, startOperation } from "./operations";
+import { mongoRequest } from "./mongodb";
 
 type Row = Record<string, CellValue>;
 async function metadata(
@@ -131,6 +133,21 @@ export function normalizeSchema(
     relation.target.columns.push(string(row.referenced_column));
   }
   for (const table of tables.values()) table.columns.sort((a, b) => a.position - b.position);
+  if (engine === "mongodb") {
+    for (const table of tables.values()) {
+      table.columns = [
+        {
+          name: "document",
+          dataType: "json",
+          nullable: false,
+          primaryKey: false,
+          position: 1,
+          defaultValue: null,
+        },
+      ];
+      table.relationships = [];
+    }
+  }
   return [...tables.values()];
 }
 const cache = new Map<string, { until: number; tables: SchemaTable[] }>();
@@ -142,6 +159,11 @@ export async function inspectSchema(
   refresh = false,
 ) {
   const connection = await getConnection(owner, connectionId);
+  if (
+    (connection.engine === "mongodb" || connection.engine === "sqlite") &&
+    selectedSchema !== null
+  )
+    throw new StoreError(400, "This database does not accept a selected schema.");
   const target: QueryTarget = {
     connectionId,
     connectionRevision: connection.revision,
@@ -155,9 +177,10 @@ export async function inspectSchema(
   if (existing) return existing;
   const pending = (async () => {
     const tables = await metadata(owner, target, "tables");
-    const columns = await metadata(owner, target, "columns");
-    const primary_keys = await metadata(owner, target, "primary_keys");
-    const foreign_keys = await metadata(owner, target, "foreign_keys");
+    const columns = connection.engine === "mongodb" ? [] : await metadata(owner, target, "columns");
+    const relational = connection.engine !== "mongodb" && connection.engine !== "clickhouse";
+    const primary_keys = relational ? await metadata(owner, target, "primary_keys") : [];
+    const foreign_keys = relational ? await metadata(owner, target, "foreign_keys") : [];
     const normalized = normalizeSchema(
       connection.database,
       { tables, columns, primary_keys, foreign_keys },
@@ -180,6 +203,7 @@ export const tableRequestSchema = z
     table: z.string().min(1).max(256),
     page: z.number().int().min(0).max(10000),
     pageSize: z.literal(100),
+    where: z.string().max(MAX_TABLE_WHERE_LENGTH).trim().optional(),
     sort: z
       .object({ column: z.string().max(256), direction: z.enum(["asc", "desc"]) })
       .strict()
@@ -193,7 +217,11 @@ export const tableRequestSchema = z
       .strict()
       .optional(),
   })
-  .strict();
+  .strict()
+  .refine((input) => !input.where || !input.filter, {
+    message: "Use a WHERE expression or a column filter, not both.",
+    path: ["where"],
+  });
 export async function browseTable(owner: OwnerIdentity, input: z.infer<typeof tableRequestSchema>) {
   const connection = await getConnection(owner, input.target.connectionId);
   if (
@@ -205,10 +233,34 @@ export async function browseTable(owner: OwnerIdentity, input: z.infer<typeof ta
   const table = tables.find(
     (t) =>
       t.name === input.table &&
-      t.schema === input.target.schema &&
+      (connection.engine === "mongodb" || connection.engine === "sqlite"
+        ? input.target.schema === null
+        : t.schema === input.target.schema) &&
       t.database === input.target.database,
   );
   if (!table) throw new StoreError(404, "Table not found in the selected schema.");
+  return startOperation(owner, input.target, tableReadRequest(connection.engine, table, input));
+}
+
+export function tableReadRequest(
+  engine: DatabaseEngine,
+  table: SchemaTable,
+  input: z.infer<typeof tableRequestSchema>,
+): OperationRequest {
+  if (engine === "mongodb") {
+    if (input.sort || input.filter || input.where)
+      throw new StoreError(400, "Use the MongoDB console to filter or sort document fields.");
+    return mongoRequest(
+      input.target,
+      JSON.stringify({
+        command: "aggregate",
+        collection: table.name,
+        pipeline: [{ $skip: input.page * 100 }, { $limit: 100 }],
+      }),
+      "read",
+      "",
+    );
+  }
   const allowed = new Set(table.columns.map((c) => c.name));
   if (
     (input.sort && !allowed.has(input.sort.column)) ||
@@ -216,16 +268,28 @@ export async function browseTable(owner: OwnerIdentity, input: z.infer<typeof ta
   )
     throw new StoreError(400, "The sort or filter column is not in this table.");
   const quote = (name: string) =>
-    connection.engine === "postgres"
+    ["postgres", "sqlite", "oracle"].includes(engine)
       ? `"${name.replaceAll('"', '""')}"`
       : `\`${name.replaceAll("`", "``")}\``;
-  const namespace = connection.engine === "postgres" ? table.schema : table.database;
+  const namespace = ["postgres", "sqlite", "oracle"].includes(engine)
+    ? table.schema
+    : table.database;
   const parameters: Parameter[] = [];
   let where = "";
-  if (input.filter) {
+  if (input.where) {
+    // Kelvo validates this query as a read. Newlines keep line comments inside the predicate.
+    where = ` WHERE (\n${input.where}\n)`;
+  } else if (input.filter) {
     if (input.filter.value === null) where = ` WHERE ${quote(input.filter.column)} IS NULL`;
     else {
-      where = ` WHERE CAST(${quote(input.filter.column)} AS ${connection.engine === "postgres" ? "TEXT" : "CHAR"}) = ${connection.engine === "postgres" ? "$1" : "?"}`;
+      if (engine === "clickhouse")
+        throw new StoreError(
+          400,
+          "ClickHouse value filters are unavailable. Use the query console.",
+        );
+      const cast = engine === "oracle" ? "VARCHAR2(4000)" : engine === "mysql" ? "CHAR" : "TEXT";
+      const placeholder = engine === "postgres" ? "$1" : engine === "oracle" ? ":1" : "?";
+      where = ` WHERE CAST(${quote(input.filter.column)} AS ${cast}) = ${placeholder}`;
       parameters.push({ type: "string", value: input.filter.value });
     }
   }
@@ -234,10 +298,10 @@ export async function browseTable(owner: OwnerIdentity, input: z.infer<typeof ta
     : [];
   for (const column of table.columns.filter((c) => c.primaryKey && c.name !== input.sort?.column))
     order.push(`${quote(column.name)} ASC`);
-  const sql = `SELECT * FROM ${quote(namespace)}.${quote(table.name)}${where}${order.length ? ` ORDER BY ${order.join(", ")}` : ""} LIMIT 100 OFFSET ${input.page * 100}`;
-  return startOperation(
-    owner,
-    input.target,
-    queryRequest(input.target, sql, "read", "", undefined, parameters),
-  );
+  const pagination =
+    engine === "oracle"
+      ? ` OFFSET ${input.page * 100} ROWS FETCH NEXT 100 ROWS ONLY`
+      : ` LIMIT 100 OFFSET ${input.page * 100}`;
+  const sql = `SELECT * FROM ${quote(namespace)}.${quote(table.name)}${where}${order.length ? ` ORDER BY ${order.join(", ")}` : ""}${pagination}`;
+  return queryRequest(input.target, sql, "read", "", undefined, parameters);
 }

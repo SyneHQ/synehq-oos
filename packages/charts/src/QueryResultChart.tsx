@@ -20,7 +20,7 @@ import {
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import { initialChartConfig, prepareChartData } from "./result-data";
-import type { QueryResultChartProps, ResultChartType } from "./types";
+import type { QueryResultChartProps, ResultChartSelectProps, ResultChartType } from "./types";
 
 use([
   BarChart,
@@ -40,22 +40,47 @@ type ChartOption = ComposeOption<
   | TooltipComponentOption
 >;
 const selectStyle: CSSProperties = {
-  border: "1px solid #d6cadd",
-  background: "white",
-  borderRadius: 0,
-  color: "#65546f",
+  border: "1px solid var(--line, #e5e5e5)",
+  background: "var(--paper, #fff)",
+  borderRadius: 4,
+  color: "inherit",
   padding: "5px 7px",
   maxWidth: 190,
   minWidth: 85,
   font: "inherit",
 };
 
+function renderNativeSelect({
+  label,
+  value,
+  options,
+  onValueChange,
+  disabled,
+}: ResultChartSelectProps) {
+  return (
+    <select
+      style={selectStyle}
+      aria-label={label}
+      value={value}
+      onChange={(event) => onValueChange(event.target.value)}
+      disabled={disabled}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function QueryResultChart({
   columns,
   rows,
   complete,
-  color = "#80609f",
+  color = "#cf3c00",
   className,
+  renderSelect = renderNativeSelect,
 }: QueryResultChartProps) {
   const [config, setConfig] = useState(() => initialChartConfig(columns, rows));
   const node = useRef<HTMLDivElement>(null);
@@ -92,16 +117,16 @@ export function QueryResultChart({
         nameLocation: "middle",
         nameGap: 40,
         ...(config.type === "scatter" ? {} : { data: prepared.points.map((point) => point.x) }),
-        axisLabel: { hideOverlap: true, color: "#8c769b" },
-        axisLine: { lineStyle: { color: "#d9cfe0" } },
+        axisLabel: { hideOverlap: true, color: "#6b6b6b" },
+        axisLine: { lineStyle: { color: "#d4d4d4" } },
         axisTick: { show: false },
       },
       yAxis: {
         type: "value",
         name: yName,
-        nameTextStyle: { color: "#8c769b" },
-        axisLabel: { color: "#8c769b" },
-        splitLine: { lineStyle: { color: "#eee7f3" } },
+        nameTextStyle: { color: "#6b6b6b" },
+        axisLabel: { color: "#6b6b6b" },
+        splitLine: { lineStyle: { color: "#e5e5e5" } },
       },
       series: [
         {
@@ -152,8 +177,8 @@ export function QueryResultChart({
         minHeight: 280,
         flexDirection: "column",
         overflow: "auto",
-        background: "#fff",
-        color: "#8a7499",
+        background: "var(--paper, #fff)",
+        color: "var(--muted, #6b6b6b)",
         fontSize: 11,
       }}
     >
@@ -161,50 +186,43 @@ export function QueryResultChart({
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: 14,
+          gap: 12,
           alignItems: "center",
-          padding: "11px 16px",
-          borderBottom: "1px solid #e9e1ef",
+          padding: "8px 12px",
+          borderBottom: "1px solid var(--line, #e5e5e5)",
         }}
       >
         <label style={{ display: "flex", gap: 7, alignItems: "center" }}>
           Type
-          <select
-            style={selectStyle}
-            aria-label="Chart type"
-            value={config.type}
-            onChange={(event) =>
-              setConfig((value) => ({
-                ...value,
-                type: event.target.value as ResultChartType,
-              }))
-            }
-          >
-            <option value="bar">Bar</option>
-            <option value="line">Line</option>
-            <option value="scatter">Scatter</option>
-          </select>
+          {renderSelect({
+            label: "Chart type",
+            value: config.type,
+            options: [
+              { value: "bar", label: "Bar" },
+              { value: "line", label: "Line" },
+              { value: "scatter", label: "Scatter" },
+            ],
+            onValueChange: (type) =>
+              setConfig((value) => ({ ...value, type: type as ResultChartType })),
+          })}
         </label>
         {(["xColumn", "yColumn"] as const).map((axis, index) => (
           <label key={axis} style={{ display: "flex", gap: 7, alignItems: "center" }}>
             {index === 0 ? "X" : "Y"}
-            <select
-              style={selectStyle}
-              aria-label={index === 0 ? "Chart X column" : "Chart Y column"}
-              value={config[axis]}
-              onChange={(event) =>
+            {renderSelect({
+              label: index === 0 ? "Chart X column" : "Chart Y column",
+              value: String(config[axis]),
+              options: columns.map((column, columnIndex) => ({
+                value: String(columnIndex),
+                label: `${columnIndex + 1}. ${column.name || "Unnamed column"}`,
+              })),
+              disabled: columns.length === 0,
+              onValueChange: (column) =>
                 setConfig((value) => ({
                   ...value,
-                  [axis]: Number(event.target.value),
-                }))
-              }
-            >
-              {columns.map((column, columnIndex) => (
-                <option key={columnIndex} value={columnIndex}>
-                  {columnIndex + 1}. {column.name || "Unnamed column"}
-                </option>
-              ))}
-            </select>
+                  [axis]: Number(column),
+                })),
+            })}
           </label>
         ))}
       </div>

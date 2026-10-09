@@ -1,0 +1,80 @@
+[
+  {
+    "engine": "postgres",
+    "url": "https://www.postgresql.org/media/img/about/press/elephant.png",
+    "retrieved": "2026-10-09",
+    "sourceFormat": "png",
+    "sourceWidth": 540,
+    "sourceHeight": 557,
+    "sourceSha256": "ff92fb5d12a7fa6b23c2eb403d2edf4fbc58ced802021e1f02c3583cb70957be",
+    "width": 248,
+    "height": 256,
+    "sha256": "73a07a1e4e6460e9b310a150ce44f36a60fb69dce1b5f564f8fc3ea034a3f222",
+    "conversion": "Sharp 0.35.5; fit inside 256 x 256; no enlargement; PNG"
+  },
+  {
+    "engine": "mysql",
+    "url": "https://avatars.githubusercontent.com/u/2452804?v=4",
+    "retrieved": "2026-10-09",
+    "sourceFormat": "png",
+    "sourceWidth": 203,
+    "sourceHeight": 203,
+    "sourceSha256": "a0900ebf69b26ade09ac0d91b80518b36a6bcf00ee1fe39a8e429f83dcc282a5",
+    "width": 203,
+    "height": 203,
+    "sha256": "f68b78efbfe9f94f545fb3e7eaccafe64ee1c5b7b0152a4e9a26172f0053c4c8",
+    "conversion": "Sharp 0.35.5; fit inside 256 x 256; no enlargement; PNG"
+  },
+  {
+    "engine": "clickhouse",
+    "url": "https://clickhouse.com/icon1.png",
+    "retrieved": "2026-10-09",
+    "sourceFormat": "png",
+    "sourceWidth": 96,
+    "sourceHeight": 96,
+    "sourceSha256": "808c127c9d3f1ce183ffa4fe5e55e01c09e96541350842fe0eb1bcacf6aa730f",
+    "width": 96,
+    "height": 96,
+    "sha256": "52fc5b8c636e2fce3956637a6e40b103a6e6acf4e91a441e4a08e916583e59f1",
+    "conversion": "Sharp 0.35.5; fit inside 256 x 256; no enlargement; PNG"
+  },
+  {
+    "engine": "mongodb",
+    "url": "https://avatars.githubusercontent.com/u/45120?v=4",
+    "retrieved": "2026-10-09",
+    "sourceFormat": "jpeg",
+    "sourceWidth": 300,
+    "sourceHeight": 300,
+    "sourceSha256": "2ecac7c6b77bef447452808ea7c3cc16f2966d7e6f405e199a3c85e3bae6d053",
+    "width": 256,
+    "height": 256,
+    "sha256": "f00149d4ce2f3275710036bd91ae8d673f98a45a984ffeec1aa631fd66dacf00",
+    "conversion": "Sharp 0.35.5; fit inside 256 x 256; no enlargement; PNG"
+  },
+  {
+    "engine": "sqlite",
+    "url": "https://sqlite.org/images/sqlite370_banner.svg",
+    "retrieved": "2026-10-09",
+    "sourceFormat": "svg",
+    "sourceWidth": 294,
+    "sourceHeight": 132,
+    "sourceSha256": "462c4ce8229b585dd6880cd308b121d9de63eb619db05e469598594e80d7b151",
+    "width": 256,
+    "height": 115,
+    "sha256": "39e0ab41fa45d287be58c3bd5ed7e3561691f3a094ca4992c5bc4e7848dc6999",
+    "conversion": "Sharp 0.35.5; fit inside 256 x 256; no enlargement; PNG"
+  },
+  {
+    "engine": "oracle",
+    "url": "https://www.oracle.com/asset/web/favicons/favicon-192.png",
+    "retrieved": "2026-10-09",
+    "sourceFormat": "png",
+    "sourceWidth": 192,
+    "sourceHeight": 192,
+    "sourceSha256": "b3ad291d75a80c3514e5b056da003553d9cfee21d136fa310f72a0d69ad029e6",
+    "width": 192,
+    "height": 192,
+    "sha256": "600625262e3ecdedf9015af809f268ca3c0a8f0b4707855fdc75a4e02ac0ce17",
+    "conversion": "Sharp 0.35.5; fit inside 256 x 256; no enlargement; PNG"
+  }
+]

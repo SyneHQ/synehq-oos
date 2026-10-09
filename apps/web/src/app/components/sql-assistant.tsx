@@ -8,6 +8,7 @@ import { api, errorMessage } from "./api";
 
 export function SqlAssistant({
   target,
+  language = "sql",
   disabled,
   onGenerated,
   onBusy,
@@ -15,6 +16,7 @@ export function SqlAssistant({
   onClose,
 }: {
   target: QueryTarget;
+  language?: "sql" | "mongodb";
   disabled: boolean;
   onGenerated: (sql: string, target: QueryTarget) => void;
   onBusy: (busy: boolean) => void;
@@ -27,6 +29,7 @@ export function SqlAssistant({
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const request = useRef<AbortController | null>(null);
+  const generatedLabel = language === "mongodb" ? "command" : "SQL";
   useEffect(() => () => request.current?.abort(), []);
   async function generate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,14 +42,17 @@ export function SqlAssistant({
     setError("");
     setDone(false);
     try {
-      const result = await api<{ sql: string }>("/api/ai/generate", {
+      const result = await api<{ sql?: string; command?: string }>("/api/ai/generate", {
         method: "POST",
         body: JSON.stringify({ target: requestTarget, prompt, includeSchema }),
         signal: controller.signal,
       });
-      if (!result.sql?.trim())
-        throw new Error("The provider returned no SQL. Change the prompt and try again.");
-      onGenerated(result.sql, requestTarget);
+      const generated = language === "mongodb" ? result.command : result.sql;
+      if (!generated?.trim())
+        throw new Error(
+          `The provider returned no ${generatedLabel}. Change the prompt and try again.`,
+        );
+      onGenerated(generated, requestTarget);
       setDone(true);
     } catch (cause) {
       if (!controller.signal.aborted) setError(errorMessage(cause));
@@ -60,7 +66,7 @@ export function SqlAssistant({
     <form className="sql-assistant" onSubmit={generate}>
       <div className="assistant-heading">
         <div>
-          <strong>Generate SQL</strong>
+          <strong>{language === "mongodb" ? "Generate a MongoDB command" : "Generate SQL"}</strong>
           <span>Review the result before you run it.</span>
         </div>
         <div>
@@ -80,14 +86,14 @@ export function SqlAssistant({
             size="sm"
             onClick={onClose}
             disabled={busy}
-            aria-label="Close SQL assistant"
+            aria-label="Close query assistant"
           >
             <X />
           </Button>
         </div>
       </div>
       <label className="sr-only" htmlFor="sql-assistant-prompt">
-        Describe the SQL query
+        {language === "mongodb" ? "Describe the MongoDB command" : "Describe the SQL query"}
       </label>
       <textarea
         id="sql-assistant-prompt"
@@ -110,7 +116,10 @@ export function SqlAssistant({
             onChange={(event) => setIncludeSchema(event.target.checked)}
             disabled={disabled || busy}
           />
-          <span>Include table and column names from {target.schema || target.database}</span>
+          <span>
+            Include {language === "mongodb" ? "collection names" : "table and column names"} from{" "}
+            {target.schema || target.database}
+          </span>
         </label>
         <Button
           type="submit"
@@ -119,12 +128,13 @@ export function SqlAssistant({
           disabled={disabled || !prompt.trim()}
           loading={busy}
         >
-          Generate SQL
+          Generate {generatedLabel}
         </Button>
       </div>
       <p className="assistant-disclosure">
         Your provider receives this prompt{includeSchema ? " and the selected schema names" : ""}.
-        This request does not send table rows. Generated SQL replaces the editor text.
+        This request does not send database rows or documents. The generated {generatedLabel}{" "}
+        replaces the editor text.
       </p>
       {error && (
         <p className="form-error" role="alert">
@@ -133,7 +143,7 @@ export function SqlAssistant({
       )}
       {done && (
         <p className="assistant-success" role="status">
-          SQL is ready in the editor. It has not run.
+          The {generatedLabel} is ready in the editor. It has not run.
         </p>
       )}
     </form>

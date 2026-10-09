@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { encodeOperation, operationDigest, type Parameter } from "@synehq-oos/kelvo-client";
+import { encodeOperation, operationDigest } from "@synehq-oos/kelvo-client";
 import {
   rowMutationOutcome,
   type CellValue,
@@ -28,6 +28,8 @@ import {
 } from "../store";
 import { queryRequest, startOperation } from "./operations";
 import { inspectSchema } from "./schema";
+
+type SqlParameter = PreparedRowMutation["parameters"][number];
 
 const identifier = z
   .string()
@@ -213,7 +215,7 @@ function typedValue(
   value: CellValue,
   column: SchemaColumn,
   engine: ConnectionSummary["engine"],
-): { parameter: Parameter; type: ColumnType; key: string } {
+): { parameter: SqlParameter; type: ColumnType; key: string } {
   const type = columnType(column, engine);
   if (value === null) return { parameter: { type: "null", value: null }, type, key: "null" };
   if (type.kind === "integer") {
@@ -452,13 +454,18 @@ export function rowStatement(
   table: SchemaTable,
   scope: RowMutationScope,
   input: RowMutation,
-): { sql: string; parameters: Parameter[] } {
+): { sql: string; parameters: SqlParameter[] } {
+  if (connection.engine !== "postgres" && connection.engine !== "mysql")
+    throw new StoreError(
+      400,
+      "Direct row changes are available for PostgreSQL and MySQL. Use an approved query for this database.",
+    );
   const mutation = mutationSchema.parse(input),
     columns = checkedColumns(connection, table, scope);
   validateRow(mutation.row, columns, connection.engine, mutation.kind === "insert");
   if (mutation.kind !== "insert") rowKey(mutation.row, columns, connection.engine);
   const postgres = connection.engine === "postgres",
-    parameters: Parameter[] = [];
+    parameters: SqlParameter[] = [];
   const quote = (name: string) =>
     postgres ? `"${name.replaceAll('"', '""')}"` : `\`${name.replaceAll("`", "``")}\``;
   const relation = postgres ? `${quote(table.schema)}.${quote(table.name)}` : quote(table.name);
@@ -548,6 +555,11 @@ async function currentTable(
   scope: RowMutationScope,
 ): Promise<{ connection: ConnectionSummary; table: SchemaTable }> {
   const connection = await getConnection(owner, scope.target.connectionId);
+  if (connection.engine !== "postgres" && connection.engine !== "mysql")
+    throw new StoreError(
+      400,
+      "Direct row changes are available for PostgreSQL and MySQL. Use an approved query for this database.",
+    );
   if (connection.readOnly)
     throw new StoreError(403, "Enable writes for this connection before preparing row changes.");
   if (

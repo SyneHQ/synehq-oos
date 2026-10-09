@@ -1,6 +1,6 @@
-import "server-only";
-import NextAuth, { type DefaultSession, type NextAuthConfig } from "next-auth";
-import Credentials from "next-auth/providers/credentials";
+import { Auth, type AuthConfig } from "@auth/core";
+import type { DefaultSession, Session } from "@auth/core/types";
+import Credentials from "@auth/core/providers/credentials";
 import { runtimeIdentity } from "../crypto/keyring";
 import {
   assertOwnerIdentity,
@@ -10,7 +10,7 @@ import {
   type OwnerIdentity,
 } from "../store";
 
-declare module "next-auth" {
+declare module "@auth/core/types" {
   interface User {
     authVersion?: number;
     sessionId?: string;
@@ -20,7 +20,7 @@ declare module "next-auth" {
   }
 }
 
-function publicUrl(): URL {
+export function publicUrl(): URL {
   const configured = process.env.AUTH_URL ?? process.env.OOS_PUBLIC_URL;
   if (!configured && process.env.NODE_ENV === "production")
     throw new Error("Set AUTH_URL to the public app URL.");
@@ -39,9 +39,11 @@ function publicUrl(): URL {
   return url;
 }
 
-export function sessionConfig(): NextAuthConfig {
+export function sessionConfig(): AuthConfig {
+  if (typeof window !== "undefined") throw new Error("Authentication is server-only.");
   const origin = publicUrl();
   return {
+    basePath: "/api/auth",
     secret: runtimeIdentity().sessionSecret,
     trustHost: true,
     session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 },
@@ -123,11 +125,23 @@ export function sessionConfig(): NextAuthConfig {
   };
 }
 
-// Lazy configuration prevents framework builds from reading installation secrets.
-export const { auth, handlers, signIn, signOut } = NextAuth(() => sessionConfig());
+export function authHandler(request: Request): Promise<Response> {
+  return Auth(request, sessionConfig());
+}
 
-export async function currentOwner(): Promise<OwnerIdentity | null> {
-  const session = await auth();
+export const handlers = { GET: authHandler, POST: authHandler };
+
+export async function currentOwner(request: Request): Promise<OwnerIdentity | null> {
+  const sessionResponse = await Auth(
+    new Request(new URL("/api/auth/session", publicUrl()), {
+      headers: { cookie: request.headers.get("cookie") ?? "" },
+      signal: request.signal,
+    }),
+    sessionConfig(),
+  );
+  if (!sessionResponse.ok)
+    throw new StoreError(503, "Authentication is unavailable. Check the server log.");
+  const session = (await sessionResponse.json()) as Session | null;
   if (!session?.user?.id) return null;
   try {
     return await assertOwnerIdentity(session.user);
@@ -137,8 +151,8 @@ export async function currentOwner(): Promise<OwnerIdentity | null> {
   }
 }
 
-export async function requireOwner(): Promise<OwnerIdentity> {
-  const owner = await currentOwner();
+export async function requireOwner(request: Request): Promise<OwnerIdentity> {
+  const owner = await currentOwner(request);
   if (!owner) throw new StoreError(401, "Sign in to continue.", "UNAUTHORIZED");
   return owner;
 }

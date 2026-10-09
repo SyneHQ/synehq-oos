@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 const config: NextConfig = {
-  output: "standalone",
+  output: "export",
+  trailingSlash: true,
+  images: { unoptimized: true },
   poweredByHeader: false,
   transpilePackages: [
     "@synehq-oos/ui",
