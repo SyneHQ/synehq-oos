@@ -14,7 +14,7 @@ A passed check applies to the source and scope listed below. The browser preview
 | --------------------------------- | ------------------------------------------ |
 | SyneHQ source used for extraction | `664256bb66f54a3dbec912efae6f7fdbdf44fc8b` |
 | Kelvo source                      | `e06ece832b3fd20b3c2d80666f1683fadcd4c1cc` |
-| OOS source revision               | Recorded below after the source commit.    |
+| OOS source revision               | `ee2eeaf82e47cc17b5eda3e183ee09bf925c76b6` |
 | Node.js                           | `24.21.0`                                  |
 | Go                                | `1.26.8`, `linux/amd64`                    |
 | PostgreSQL fixture                | `16.15`                                    |
@@ -127,6 +127,8 @@ The standalone Syne Charts module passed seven tests and its Prettier check. Its
 
 The final Linux gate passed at 05:30:19 UTC on 9 October 2026. All 58 unit tests, TypeScript, Prettier, and the production build passed. Browser clipboard checks then passed against that production build.
 
-The tested code revision is recorded below after the source commit.
+Tested code revision: `ee2eeaf82e47cc17b5eda3e183ee09bf925c76b6`. Later documentation-only commits do not change the checked code.
+
+GitHub runs the repository checks on each push. See the [check workflow](https://github.com/SyneHQ/synehq-oos/actions/workflows/check.yml).
 
 Keep credentials, setup tokens, environment files, cookies, and private keys out of the evidence record.
