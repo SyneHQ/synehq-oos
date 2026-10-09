@@ -36,6 +36,30 @@ The image builds the dashboard as static files. It compiles the backend to JavaS
 
 The Dockerfile pins its Node, Go, and Distroless base images by digest. The current qualification covers `linux/amd64`.
 
+## GitHub container builds
+
+The `Check` workflow builds the complete container after the web checks pass. Pull requests build the image without a registry login or push. A push to `main` builds and publishes these tags:
+
+| Image tag                                         | Use                                                           |
+| ------------------------------------------------- | ------------------------------------------------------------- |
+| `ghcr.io/synehq/synehq-oos:edge`                  | The latest successful build from `main`. This tag can change. |
+| `ghcr.io/synehq/synehq-oos:sha-<full-commit-sha>` | The build for a specific OOS source commit.                   |
+
+The workflow reads `deploy/kelvo-revision` and supplies that public Git commit as the `kelvo_source` build context. It builds `linux/amd64` and reuses the GitHub Actions build cache. It authenticates to GHCR with the job's `GITHUB_TOKEN`; no personal access token is required.
+
+After the first publication, a repository administrator must check the GHCR package visibility. Set it to public to allow anonymous pulls. A public source repository does not automatically make its container package public.
+
+To use a published development image on a supported host:
+
+```sh
+docker pull ghcr.io/synehq/synehq-oos:edge
+sudo sh deploy/run-container.sh ghcr.io/synehq/synehq-oos:edge
+```
+
+Use a matching source checkout for the launcher. For repeatable installations, record the image digest and pass `ghcr.io/synehq/synehq-oos@sha256:<digest>` to the launcher. Commit tags identify source; a digest pins the image content.
+
+An image publication is not a qualified release or a deployment. The workflow does not publish a `latest` tag, start a service, or update an existing installation. See the [validation record](validation.md) for remaining release checks.
+
 ## Start the installation
 
 Run the launcher from the source checkout on the Docker host:
