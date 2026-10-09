@@ -1,0 +1,281 @@
+/**
+ * Probe — Tier 2: semantic tokens.
+ *
+ * Four themes: light, dark, light-hc, dark-hc. Every theme declares the
+ * IDENTICAL key set; only the values differ. Tier 3 and component CSS read
+ * these names and nothing else, so a theme swap never touches a component.
+ *
+ * Selectors deliberately support three entry points so this composes with
+ * whatever the app already does:
+ *   - `[data-probe-theme='…']` — explicit, the canonical switch
+ *   - `.probe-light` / `.probe-dark` / `.probe-light-hc` / `.probe-dark-hc`
+ *   - `.dark` — the class this repo's Tailwind `darkMode: 'class'` already sets
+ *
+ * The `.dark` bridge is guarded with `:not([data-probe-theme])`: it is an
+ * inference about what the app wants, and an explicit `data-probe-theme` on the
+ * same element must beat it. Without the guard the two are equal specificity
+ * and source order alone decides, which means `data-probe-theme="light"` on a
+ * `<html class="dark">` would silently do nothing.
+ *
+ * The high-contrast themes are declared by JOINING the base selector list
+ * rather than by copying the base block. That is not a shortcut: it makes it
+ * structurally impossible for a high-contrast theme's text tokens to drift
+ * from its base theme. HC is a diff over BORDERS and FOCUS only — never text.
+ *
+ * Dark is the mirror of light: where light reaches for ramp step `i`, dark
+ * reaches for step `12 - i`.
+ */
+
+/* =======================================================================
+ * LIGHT (also the base layer for light-hc)
+ * ===================================================================== */
+:root,
+[data-probe-theme="light"],
+.probe-light,
+[data-probe-theme="light-hc"],
+.probe-light-hc {
+  color-scheme: light;
+
+  /* Text ----------------------------------------------------------------
+   * text-faint is 3.07:1 here: AA for large or decorative text ONLY.
+   * Never body copy, never the sole carrier of meaning. */
+  --probe-text-primary: var(--probe-neutral-700); /* 12.3:1 on page */
+  --probe-text-secondary: var(--probe-neutral-500); /* 4.75:1 on page */
+  --probe-text-faint: var(--probe-neutral-400);
+  --probe-text-disabled: var(--probe-neutral-300);
+  --probe-text-strong: var(--probe-neutral-800);
+  --probe-text-link: var(--probe-brand-600); /* 8.13:1 on page */
+  --probe-text-link-hover: var(--probe-brand-700);
+  --probe-text-on-accent: var(--probe-neutral-000); /* 8.13:1 on accent */
+
+  /* Surfaces — depth is one background step plus a 1px border, no shadows. */
+  --probe-surface-page: var(--probe-neutral-000);
+  --probe-surface-raised: var(--probe-neutral-000);
+  --probe-surface-sunken: var(--probe-neutral-025);
+  --probe-surface-overlay: var(--probe-neutral-000);
+  --probe-surface-inverted: var(--probe-neutral-800);
+
+  /* Borders
+   *
+   * border-primary/secondary/strong are DECORATIVE. They separate things,
+   * and WCAG does not govern them: a divider carries no information a
+   * sighted user would otherwise lose.
+   *
+   * border-control is not decorative. It is the boundary of an interactive
+   * control, which SC 1.4.11 holds to 3:1 against its adjacent background,
+   * and for an unfilled input the border IS the control - surface-raised
+   * and surface-page are the same white in this theme, so nothing else
+   * says "you can type here". It gets its own token rather than borrowing
+   * border-strong because border-strong also paints dividers, the active
+   * section-nav rule and the toast accent, and those should not be dragged
+   * darker to satisfy a rule that was never about them.
+   *
+   * neutral-500 on the three light surfaces: 4.75 / 4.75 / 4.46.
+   * The next step up, neutral-400, gives 3.07 on page but 2.89 on sunken -
+   * a fail on the one surface forms most often sit on. The ramp offers
+   * nothing between, so this is the lightest conformant choice. */
+  --probe-border-primary: var(--probe-neutral-100);
+  --probe-border-secondary: var(--probe-neutral-200);
+  --probe-border-strong: var(--probe-neutral-400);
+  --probe-border-control: var(--probe-neutral-500);
+  --probe-border-control-hover: var(--probe-neutral-600);
+  --probe-border-focus: var(--probe-brand-600);
+
+  /* Accent */
+  --probe-accent: var(--probe-brand-600);
+  --probe-accent-hover: var(--probe-brand-700);
+  --probe-accent-active: var(--probe-brand-800);
+  --probe-accent-subtle: var(--probe-brand-025);
+  --probe-accent-muted: var(--probe-brand-100);
+
+  /* Status — fg/bg is the subtle pairing (9.3–10.1:1); solid/solid-fg is the
+   * filled pairing. Always pair these with an icon or text, never colour alone. */
+  --probe-success-fg: var(--probe-success-700);
+  --probe-success-bg: var(--probe-success-025);
+  --probe-success-border: var(--probe-success-200);
+  --probe-success-solid: var(--probe-success-600);
+  --probe-success-solid-fg: var(--probe-neutral-000);
+
+  --probe-critical-fg: var(--probe-critical-700);
+  --probe-critical-bg: var(--probe-critical-025);
+  --probe-critical-border: var(--probe-critical-200);
+  --probe-critical-solid: var(--probe-critical-600);
+  --probe-critical-solid-fg: var(--probe-neutral-000);
+
+  --probe-warning-fg: var(--probe-warning-700);
+  --probe-warning-bg: var(--probe-warning-025);
+  --probe-warning-border: var(--probe-warning-200);
+  --probe-warning-solid: var(--probe-warning-600);
+  --probe-warning-solid-fg: var(--probe-neutral-000);
+
+  --probe-info-fg: var(--probe-info-700);
+  --probe-info-bg: var(--probe-info-025);
+  --probe-info-border: var(--probe-info-200);
+  --probe-info-solid: var(--probe-info-600);
+  --probe-info-solid-fg: var(--probe-neutral-000);
+
+  /* Focus */
+  --probe-focus-ring: var(--probe-brand-600);
+  --probe-focus-ring-critical: var(--probe-critical-600);
+  --probe-focus-ring-width: 2px;
+  --probe-focus-ring-offset: 2px;
+
+  /* Overlays — translucent BLACK in light, translucent WHITE in dark. One
+   * hover rule then works correctly on every surface in the system. */
+  --probe-hover-overlay: rgb(0 0 0 / 0.04);
+  --probe-active-overlay: rgb(0 0 0 / 0.08);
+  --probe-overlay-scrim: rgb(17 16 23 / 0.6);
+}
+
+/* =======================================================================
+ * DARK (also the base layer for dark-hc) — the mirror of light.
+ * ===================================================================== */
+[data-probe-theme="dark"],
+.dark:not([data-probe-theme]),
+.probe-dark,
+[data-probe-theme="dark-hc"],
+.probe-dark-hc {
+  color-scheme: dark;
+
+  /* Text — text-faint is 9.2:1 here; the same "large or decorative only"
+   * rule still applies, for consistency across themes. */
+  --probe-text-primary: var(--probe-neutral-050); /* 16.3:1 on page */
+  --probe-text-secondary: var(--probe-neutral-200); /* 11.5:1 on page */
+  --probe-text-faint: var(--probe-neutral-300);
+  --probe-text-disabled: var(--probe-neutral-500);
+  --probe-text-strong: var(--probe-neutral-025);
+  --probe-text-link: var(--probe-brand-200); /* 10.4:1 on page */
+  --probe-text-link-hover: var(--probe-brand-100);
+  --probe-text-on-accent: var(--probe-neutral-900); /* 5.75:1 on accent */
+
+  /* Surfaces */
+  --probe-surface-page: var(--probe-neutral-900);
+  --probe-surface-raised: var(--probe-neutral-800);
+  --probe-surface-sunken: var(--probe-neutral-950);
+  --probe-surface-overlay: var(--probe-neutral-800);
+  --probe-surface-inverted: var(--probe-neutral-050);
+
+  /* Borders */
+  --probe-border-primary: var(--probe-neutral-700);
+  --probe-border-secondary: var(--probe-neutral-600);
+  --probe-border-strong: var(--probe-neutral-400);
+  /* neutral-300 is neutral-500's mirror, so this is the same token in the
+   * same place on the ramp: 9.20 / 8.06 / 10.21 on the dark surfaces. */
+  --probe-border-control: var(--probe-neutral-300);
+  --probe-border-control-hover: var(--probe-neutral-200);
+  --probe-border-focus: var(--probe-brand-300);
+
+  /* Accent */
+  --probe-accent: var(--probe-brand-400);
+  --probe-accent-hover: var(--probe-brand-300);
+  --probe-accent-active: var(--probe-brand-200);
+  --probe-accent-subtle: var(--probe-brand-900);
+  --probe-accent-muted: var(--probe-brand-800);
+
+  /* Status */
+  --probe-success-fg: var(--probe-success-200);
+  --probe-success-bg: var(--probe-success-900);
+  --probe-success-border: var(--probe-success-700);
+  --probe-success-solid: var(--probe-success-400);
+  --probe-success-solid-fg: var(--probe-neutral-900);
+
+  --probe-critical-fg: var(--probe-critical-200);
+  --probe-critical-bg: var(--probe-critical-900);
+  --probe-critical-border: var(--probe-critical-700);
+  --probe-critical-solid: var(--probe-critical-400);
+  --probe-critical-solid-fg: var(--probe-neutral-900);
+
+  --probe-warning-fg: var(--probe-warning-200);
+  --probe-warning-bg: var(--probe-warning-900);
+  --probe-warning-border: var(--probe-warning-700);
+  --probe-warning-solid: var(--probe-warning-400);
+  --probe-warning-solid-fg: var(--probe-neutral-900);
+
+  --probe-info-fg: var(--probe-info-200);
+  --probe-info-bg: var(--probe-info-900);
+  --probe-info-border: var(--probe-info-700);
+  --probe-info-solid: var(--probe-info-400);
+  --probe-info-solid-fg: var(--probe-neutral-900);
+
+  /* Focus */
+  --probe-focus-ring: var(--probe-brand-300);
+  --probe-focus-ring-critical: var(--probe-critical-300);
+  --probe-focus-ring-width: 2px;
+  --probe-focus-ring-offset: 2px;
+
+  /* Overlays */
+  --probe-hover-overlay: rgb(255 255 255 / 0.06);
+  --probe-active-overlay: rgb(255 255 255 / 0.12);
+  --probe-overlay-scrim: rgb(0 0 0 / 0.7);
+}
+
+/* =======================================================================
+ * HIGH CONTRAST — borders and focus only. Text is byte-identical to the
+ * base theme because it is literally the same declaration (see above).
+ * ===================================================================== */
+[data-probe-theme="light-hc"],
+.probe-light-hc {
+  --probe-border-primary: var(--probe-neutral-200);
+  --probe-border-secondary: var(--probe-neutral-400);
+  --probe-border-strong: var(--probe-neutral-500);
+  --probe-border-control: var(--probe-neutral-600);
+  --probe-border-control-hover: var(--probe-neutral-700);
+  --probe-border-focus: var(--probe-brand-700);
+  --probe-focus-ring: var(--probe-brand-700);
+  --probe-focus-ring-critical: var(--probe-critical-700);
+  --probe-focus-ring-width: 3px;
+}
+
+[data-probe-theme="dark-hc"],
+.probe-dark-hc {
+  --probe-border-primary: var(--probe-neutral-600);
+  --probe-border-secondary: var(--probe-neutral-400);
+  --probe-border-strong: var(--probe-neutral-300);
+  --probe-border-control: var(--probe-neutral-200);
+  --probe-border-control-hover: var(--probe-neutral-100);
+  --probe-border-focus: var(--probe-brand-200);
+  --probe-focus-ring: var(--probe-brand-200);
+  --probe-focus-ring-critical: var(--probe-critical-200);
+  --probe-focus-ring-width: 3px;
+}
+
+/* Users who asked the OS for more contrast get the HC border diff without
+ * having to find a setting in the app. Text still never changes. */
+@media (prefers-contrast: more) {
+  :root,
+  [data-probe-theme="light"],
+  .probe-light {
+    --probe-border-primary: var(--probe-neutral-200);
+    --probe-border-secondary: var(--probe-neutral-400);
+    --probe-border-strong: var(--probe-neutral-500);
+    --probe-border-control: var(--probe-neutral-600);
+    --probe-border-control-hover: var(--probe-neutral-700);
+    --probe-border-focus: var(--probe-brand-700);
+    --probe-focus-ring: var(--probe-brand-700);
+    --probe-focus-ring-critical: var(--probe-critical-700);
+    --probe-focus-ring-width: 3px;
+  }
+
+  [data-probe-theme="dark"],
+  .dark:not([data-probe-theme]),
+  .probe-dark {
+    --probe-border-primary: var(--probe-neutral-600);
+    --probe-border-secondary: var(--probe-neutral-400);
+    --probe-border-strong: var(--probe-neutral-300);
+    --probe-border-control: var(--probe-neutral-200);
+    --probe-border-control-hover: var(--probe-neutral-100);
+    --probe-border-focus: var(--probe-brand-200);
+    --probe-focus-ring: var(--probe-brand-200);
+    --probe-focus-ring-critical: var(--probe-critical-200);
+    --probe-focus-ring-width: 3px;
+  }
+}
+
+/* Zeroing the duration primitives disarms every transition in the system at
+ * once — components never need their own reduced-motion branch. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --probe-duration: 0ms;
+    --probe-duration-fast: 0ms;
+  }
+}

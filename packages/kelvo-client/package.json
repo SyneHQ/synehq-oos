@@ -1,0 +1,13 @@
+{
+  "name": "@synehq-oos/kelvo-client",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@synehq-oos/explorer-contracts": "0.1.0",
+    "apache-arrow": "21.0.0"
+  }
+}

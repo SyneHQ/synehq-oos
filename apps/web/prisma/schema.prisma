@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Instance {
+  id             Int       @id @default(1)
+  installationId String    @unique
+  initializedAt  DateTime?
+  setupTokenHash String?
+  setupExpiresAt DateTime?
+  executionEpoch String
+  maintenance    Boolean   @default(false)
+  maintenanceReason String?
+  historyEnabled Boolean   @default(true)
+  retentionDays  Int       @default(30)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Owner {
+  id           String    @id @default("owner")
+  email        String    @unique
+  name         String
+  passwordHash String
+  authVersion  Int       @default(1)
+  status       String    @default("active")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+  sessions     OwnerSession[]
+  connections  Connection[]
+  savedQueries SavedQuery[]
+}
+
+model OwnerSession {
+  id          String    @id
+  ownerId     String
+  owner       Owner     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  authVersion Int
+  expiresAt   DateTime
+  lastSeenAt  DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([ownerId, revokedAt])
+}
+
+model Connection {
+  id                String    @id
+  ownerId           String
+  owner             Owner     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  engine            String
+  label             String
+  host              String
+  port              Int
+  database          String
+  username          String
+  tlsMode           String    @default("verify-full")
+  readOnly          Boolean   @default(true)
+  revision          Int       @default(1)
+  credentials       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  @@index([ownerId, deletedAt])
+}
+
+model QueryApproval {
+  id                 String    @id
+  operationId        String    @unique
+  tokenHash          String    @unique
+  ownerId            String
+  sessionId          String
+  authVersion        Int
+  connectionId       String
+  connectionRevision Int
+  executionEpoch     String
+  scopeDigest        String
+  expiresAt          DateTime
+  consumedAt         DateTime?
+  createdAt          DateTime  @default(now())
+
+  @@index([connectionId, consumedAt])
+}
+
+model Execution {
+  operationId        String    @id
+  ownerId            String
+  sessionId          String
+  authVersion        Int
+  connectionId       String
+  connectionRevision Int
+  database           String
+  schema             String?
+  executionEpoch     String
+  operationDigest    String
+  requestJson        String
+  write              Boolean
+  approvalId         String?
+  status             String    @default("queued")
+  grantIssuedAt      Int
+  grantExpiresAt     Int
+  grantDigest        String
+  claimsJson         String
+  receiptJson        String?
+  admissionRejectionJson String?
+  kelvoOperationId   String?   @unique
+  workerId           String?
+  workerOwner        String?
+  claim              String?
+  custodyCompletedAt DateTime?
+  sql                String?
+  error              String?
+  affectedRows       Int?
+  durationMs         Int?
+  dispatchedAt       DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([ownerId, createdAt])
+  @@index([connectionId, status])
+}
+
+model AiSettings {
+  id          String    @id @default("ai")
+  enabled     Boolean   @default(false)
+  endpoint    String
+  model       String
+  credentials String?
+  revision    Int       @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model SavedQuery {
+  id           String    @id
+  ownerId      String
+  owner        Owner     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  connectionId String
+  database     String
+  title        String
+  sql          String
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([ownerId, deletedAt])
+}
+
+model ActionLog {
+  id        String   @id
+  actor     String
+  action    String
+  target    String
+  outcome   String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model LoginThrottle {
+  id          String   @id
+  count       Int
+  windowStart DateTime
+}

@@ -1,0 +1,373 @@
+{
+  "repository": "SyneHQ/app.ts",
+  "revision": "664256bb66f54a3dbec912efae6f7fdbdf44fc8b",
+  "files": [
+    {
+      "source": "src/components/data-grid/data-grid-cell-variants.tsx",
+      "sha256": "66f570fbac4ed44dd58df493be5fc1b24fbaa56cead46d10b6e37fb699a36f3a",
+      "destination": "packages/explorer/src/cloud/components/data-grid/data-grid-cell-variants.tsx",
+      "gitBlob": "cec5d33852b5af395aeecee8154132dc45563ac0"
+    },
+    {
+      "source": "src/components/data-grid/data-grid-cell-wrapper.tsx",
+      "sha256": "9a7f5b4fb89ec432d0c8eb332edeabb7d7336bcac17f7caec50fa252aad0e764",
+      "destination": "packages/explorer/src/cloud/components/data-grid/data-grid-cell-wrapper.tsx",
+      "gitBlob": "e5f4123342a38a1d04113acb6d996d7ff06f0f81"
+    },
+    {
+      "source": "src/components/data-grid/data-grid-cell.tsx",
+      "sha256": "00f700fa9b61e82b7b7badb2df952fff75e54bc3209889fde716eb9246f9e493",
+      "destination": "packages/explorer/src/cloud/components/data-grid/data-grid-cell.tsx",
+      "gitBlob": "78df802124b09f0d4f599f89b9ac816f1e38ba87"
+    },
+    {
+      "source": "src/components/data-grid/data-grid-column-header.tsx",
+      "sha256": "1a082d9c4adbc6f8026da214d3853c3d981081109fa4f83a7b9bbb21f1dcb8ce",
+      "destination": "packages/explorer/src/cloud/components/data-grid/data-grid-column-header.tsx",
+      "gitBlob": "eed1a8551ae7cc4af8537e4473f524aefb784e11"
+    },
+    {
+      "source": "src/components/data-grid/data-grid-context-menu.tsx",
+      "sha256": "2433f64525a985a95df0c36076eb00a2711631a3496d91179f195a0e24955086",
+      "destination": "packages/explorer/src/cloud/components/data-grid/data-grid-context-menu.tsx",
+      "gitBlob": "46bfa3745db86b74debcb61909a4e4041644b81a"
+    },
+    {
+      "source": "src/components/data-grid/data-grid-json-cell.tsx",
+      "sha256": "c1d40cf319fa5ff270f778eeea24725a883736936091997df969405aa4d641a4",
+      "destination": "packages/explorer/src/cloud/components/data-grid/data-grid-json-cell.tsx",
+      "gitBlob": "15eac0d3ee4cf66646d9fcae5beddda552aea0c1"
+    },
+    {
+      "source": "src/components/data-grid/data-grid-keyboard-shortcuts.tsx",
+      "sha256": "ef36e5fcc36b4e10354eb3eb3f305ca68fa55584c8e7f30d15aaf5035003eba8",
+      "destination": "packages/explorer/src/cloud/components/data-grid/data-grid-keyboard-shortcuts.tsx",
+      "gitBlob": "9c882b25dfbbb5b92221b340d087f00ad8b052e4"
+    },
+    {
+      "source": "src/components/data-grid/data-grid-paste-dialog.tsx",
+      "sha256": "246c064fb0581d5c158df024a7f86e312337cb3b9f92054cfc7eeb275a9d539b",
+      "destination": "packages/explorer/src/cloud/components/data-grid/data-grid-paste-dialog.tsx",
+      "gitBlob": "e0e2ce6f4225cd2c05321449a1b927b0617e473a"
+    },
+    {
+      "source": "src/components/data-grid/data-grid-row.tsx",
+      "sha256": "21c693cf41a2e8572c6ccf8cde948c676fc4cd226063539036351716fd568030",
+      "destination": "packages/explorer/src/cloud/components/data-grid/data-grid-row.tsx",
+      "gitBlob": "835edcde4901bed6b805f35666a327905c0bea57"
+    },
+    {
+      "source": "src/components/data-grid/data-grid-search.tsx",
+      "sha256": "5b83dc7100a30be1934aa8d33270836cc848e279c9e4486931f20c56a3389e3a",
+      "destination": "packages/explorer/src/cloud/components/data-grid/data-grid-search.tsx",
+      "gitBlob": "94930af59779bf648bcd884e8b42416a41f5c7fd"
+    },
+    {
+      "source": "src/components/data-grid/data-grid-select-column.tsx",
+      "sha256": "3a3a13f28f34a7e1eeda4efd401ce3b5618bd36b18a1e53fa40dfd8513c43ee8",
+      "destination": "packages/explorer/src/cloud/components/data-grid/data-grid-select-column.tsx",
+      "gitBlob": "d378db971e4016d75fd4cd8692f1f6e815febf8c"
+    },
+    {
+      "source": "src/components/data-grid/data-grid.tsx",
+      "sha256": "2845019e4ad7fd6ac832d017e12e136d3c1d8b3f4a12955eb16bd53e26248d68",
+      "destination": "packages/explorer/src/cloud/components/data-grid/data-grid.tsx",
+      "gitBlob": "cc8de54ec4b870144145b853ba86ffad4a79da1c"
+    },
+    {
+      "source": "src/components/table/explorer-data-grid.tsx",
+      "sha256": "7da00af02971050f0e4c3d8a3ab55f88ca4331600ddeeed4c4649b90d13222ae",
+      "destination": "packages/explorer/src/cloud/components/table/explorer-data-grid.tsx",
+      "gitBlob": "21c4d325ad4f7d42064a53409998985bea7e731f"
+    },
+    {
+      "source": "src/components/table/explorer-table.tsx",
+      "sha256": "4b26d83d5df9ddf73bef09b32265f72fffd56dba6a304f780d22024f97b3d41a",
+      "destination": "packages/explorer/src/cloud/components/table/explorer-table.tsx",
+      "gitBlob": "693b8d474630fcbf9f2f85da41cf3da8c62f4cda"
+    },
+    {
+      "source": "src/components/table/reducer.ts",
+      "sha256": "bb096141724f2d0ea2357a13ff62a76c7ee94ffb35d951195468920682d92405",
+      "destination": "packages/explorer/src/cloud/components/table/reducer.ts",
+      "gitBlob": "aadad79ac4385592cdbda871618d2c0d02b6015c"
+    },
+    {
+      "source": "src/components/table/types/interfaces.tsx",
+      "sha256": "25392b41a2311525f3a1e94c04dc68ed0ffcaa58b08132a5ccfba3544b08dda0",
+      "destination": "packages/explorer/src/cloud/components/table/types/interfaces.tsx",
+      "gitBlob": "ae6b95c54184111b718627803da71c58df860e27"
+    },
+    {
+      "source": "src/components/table/types/type.tsx",
+      "sha256": "df323aa83f563f90e7c3d25812f7343fc8314b1ecfa1196cb39f09d4170591a8",
+      "destination": "packages/explorer/src/cloud/components/table/types/type.tsx",
+      "gitBlob": "6211f9a5dfe222813e9af03f1e4054237752f4a6"
+    },
+    {
+      "source": "src/components/table/utils/table.ts",
+      "sha256": "50827cc50f6c9231e692251bfee2346a0ff33a262f1c55cbdaa675c7f679748f",
+      "destination": "packages/explorer/src/cloud/components/table/utils/table.ts",
+      "gitBlob": "95fd3eb3c176d4e9c9006b27e064873eaf7ffd53"
+    },
+    {
+      "source": "src/components/ui/badge.tsx",
+      "sha256": "b3ae8a9deec2ac1ee73e09b2710ae0ab117799e7acfe16d0867684a5e5b06bbd",
+      "destination": "packages/explorer/src/cloud/components/ui/badge.tsx",
+      "gitBlob": "fe8b5ddb766dfe31ac6d47f2cd76edf62a367276"
+    },
+    {
+      "source": "src/components/ui/button.tsx",
+      "sha256": "278694449ec948b9e34092091977c9f5b6ca7255331ba360dbebfde70e19c0c1",
+      "destination": "packages/explorer/src/cloud/components/ui/button.tsx",
+      "gitBlob": "e6385b9c228f7aae33f3e13398a4653baee4f586"
+    },
+    {
+      "source": "src/components/ui/card.tsx",
+      "sha256": "e6f9426ad529081c40d13a5a42b06888242c0b2c5d1444ae826b476ff8dbf9f8",
+      "destination": "packages/explorer/src/cloud/components/ui/card.tsx",
+      "gitBlob": "880e21b636e3c26f40f2b7a3012d35f5aa56398d"
+    },
+    {
+      "source": "src/components/ui/command.tsx",
+      "sha256": "852bad653e963859363403ce4e4b25db8d069b9d9da684bd744792d3762f1f19",
+      "destination": "packages/explorer/src/cloud/components/ui/command.tsx",
+      "gitBlob": "d9abcfb959617f61ff8352e9aa314a7a70e81d70"
+    },
+    {
+      "source": "src/components/ui/data-table-pagination.tsx",
+      "sha256": "2c9f28653da86a2f1399e4c9e1a100a1827e5888ed6d361313017eb958ad4bd1",
+      "destination": "packages/explorer/src/cloud/components/ui/data-table-pagination.tsx",
+      "gitBlob": "bc04bcc7356c1ebaa89ab25d6e43bb6a0f015bdb"
+    },
+    {
+      "source": "src/components/ui/dialog.tsx",
+      "sha256": "7ad926d1ef950b689cc110312dd917d436b4bf100ead134fa993f3d5c097045a",
+      "destination": "packages/explorer/src/cloud/components/ui/dialog.tsx",
+      "gitBlob": "dec82e0564c92279f99fa655aa531440110ed3d1"
+    },
+    {
+      "source": "src/components/ui/dropdown-menu.tsx",
+      "sha256": "736f48a4e9fb77935c825deeae436503c5e451a59dea29275810bdf956b34b3b",
+      "destination": "packages/explorer/src/cloud/components/ui/dropdown-menu.tsx",
+      "gitBlob": "8b94d714c7cfa87a3f884eda199f55193beb91f7"
+    },
+    {
+      "source": "src/components/ui/kbd.tsx",
+      "sha256": "04944f34704862a9a8970c3fcbee79545b18dbb37f78e705f4c534e70b412aed",
+      "destination": "packages/explorer/src/cloud/components/ui/kbd.tsx",
+      "gitBlob": "2a4409687121647966cdae2e77e8e21a2c622cc0"
+    },
+    {
+      "source": "src/components/ui/popover.tsx",
+      "sha256": "c6b3132f7bb1dbb0654ba9e13d853c188f77f9903e3617332edea2271d63b523",
+      "destination": "packages/explorer/src/cloud/components/ui/popover.tsx",
+      "gitBlob": "db53d569027ebebce5ab9c471a5437cb0eecd308"
+    },
+    {
+      "source": "src/components/ui/select.tsx",
+      "sha256": "138b93ef86ca186fa52be5dbc22b887640294887134738e66c3bcb75b80af5f9",
+      "destination": "packages/explorer/src/cloud/components/ui/select.tsx",
+      "gitBlob": "4dafd6f27622ec04d1bb9d4418e7ec9b4f3fadbc"
+    },
+    {
+      "source": "src/components/ui/separator.tsx",
+      "sha256": "0e947f23c8f6b839d7f5fb464373d4830cb47e77d7c3fc21b19a2eb36e1563ab",
+      "destination": "packages/explorer/src/cloud/components/ui/separator.tsx",
+      "gitBlob": "3d82f420dab2363025ecfaf5a9455b9eef9b0737"
+    },
+    {
+      "source": "src/components/ui/sheet.tsx",
+      "sha256": "2a9c9ae20fbe3bfbef19938158523c8d116fa09cdfcd5c1d90b8d6a238012b97",
+      "destination": "packages/explorer/src/cloud/components/ui/sheet.tsx",
+      "gitBlob": "8300c07b373a7eea6e30e4dc02f26fe0ad6442e7"
+    },
+    {
+      "source": "src/hooks/use-as-ref.ts",
+      "sha256": "bf537bb50b9640ab7e8a37f88685a631b38d31ea9d610b34915529dc1d1efbba",
+      "destination": "packages/explorer/src/cloud/hooks/use-as-ref.ts",
+      "gitBlob": "5fe2f896d044d9cdf24375a5bff469b597e621b4"
+    },
+    {
+      "source": "src/hooks/use-badge-overflow.ts",
+      "sha256": "a4f7d9556df65621647f01dab11dce109cc3431fda2488ee1a77f6d37e49b190",
+      "destination": "packages/explorer/src/cloud/hooks/use-badge-overflow.ts",
+      "gitBlob": "357aa1edb74212d24c9cf41bd0a5c0cdd5b6c027"
+    },
+    {
+      "source": "src/hooks/use-callback-ref.ts",
+      "sha256": "83ebaef92c057730d89d854fd0edee3e0a85db466631ede0b0eb064537de4179",
+      "destination": "packages/explorer/src/cloud/hooks/use-callback-ref.ts",
+      "gitBlob": "b47cbfc4d0c6b27b15861d1976cb5dbb31fb197c"
+    },
+    {
+      "source": "src/hooks/use-data-grid.ts",
+      "sha256": "3c194a4d515a9939ef47a141f0d65540a7d829632bf73d27881dcf183477638d",
+      "destination": "packages/explorer/src/cloud/hooks/use-data-grid.ts",
+      "gitBlob": "479ac99b5f25729d1ce84938448c734f2c35bdb9"
+    },
+    {
+      "source": "src/hooks/use-debounced-callback.ts",
+      "sha256": "b0d7a83e943bad616022c399dcfd62e504c5ab44320b11059467c2dfd0f16c0e",
+      "destination": "packages/explorer/src/cloud/hooks/use-debounced-callback.ts",
+      "gitBlob": "72f88e2b6a01359aaab20f3f4cf9bd7448eeb731"
+    },
+    {
+      "source": "src/hooks/use-isomorphic-layout-effect.ts",
+      "sha256": "4a327e15f1cf27f3bd46f159d4b4356f0d42a033d8ae7fe52c3957580033fcfd",
+      "destination": "packages/explorer/src/cloud/hooks/use-isomorphic-layout-effect.ts",
+      "gitBlob": "b416bd41479a9cb616cca0e5fe47abe4649bc21e"
+    },
+    {
+      "source": "src/hooks/use-lazy-ref.ts",
+      "sha256": "ea120321a5b0277c2e91251c15fae528e58a29de4313d74b64082193b1ccee7b",
+      "destination": "packages/explorer/src/cloud/hooks/use-lazy-ref.ts",
+      "gitBlob": "c59182b7cc1180f7280bb262ae8a814b747cc41b"
+    },
+    {
+      "source": "src/lib/compose-refs.ts",
+      "sha256": "ccbdceda58f3dba2a356eb5d2a9962fabb4b2b28aab98baf5abeb4a9be013c45",
+      "destination": "packages/explorer/src/cloud/lib/compose-refs.ts",
+      "gitBlob": "56a7992efcc523b4993e27dad7558447d39303ec"
+    },
+    {
+      "source": "src/lib/data-grid.ts",
+      "sha256": "9fcf6b887cbe6383d598487210a3339cd6bf5171825776afc40ee9b9be9aef0e",
+      "destination": "packages/explorer/src/cloud/lib/data-grid.ts",
+      "gitBlob": "de560f8dfdad6c2301c3665201715d427bb0075e"
+    },
+    {
+      "source": "src/types/data-grid.ts",
+      "sha256": "1a0cf5644826431180ab04cda85e9522e77ef1ada6e0499b8249c55329041d7f",
+      "destination": "packages/explorer/src/cloud/types/data-grid.ts",
+      "gitBlob": "408cb812bde3461119241d1d2fd2ec170484fd5e"
+    },
+    {
+      "source": "src/packages/probe/components/card.tsx",
+      "sha256": "1c4c945e97b64004040817aadb71184dd00ed79046ef75d1f454df566963a155",
+      "destination": "packages/ui/src/components/card.tsx",
+      "gitBlob": "6edfcb962d3e9c35acfaf4383411d15e1aad91c6"
+    },
+    {
+      "source": "src/packages/probe/components/checkbox.tsx",
+      "sha256": "d46d73462cef9694b030d4f4791eaaab317a61041bb099f1605c92f2507992d0",
+      "destination": "packages/ui/src/components/checkbox.tsx",
+      "gitBlob": "5c1184306853d37532e60e224ee9f20e5a5d9ab2"
+    },
+    {
+      "source": "src/packages/probe/components/dialog.tsx",
+      "sha256": "cd531a0a80c20ba642a55f8b766f9b17a5e489551b582923c9221cb009218c2b",
+      "destination": "packages/ui/src/components/dialog.tsx",
+      "gitBlob": "f9ec53fde15d94621afd0bade67e45addf3b5793"
+    },
+    {
+      "source": "src/packages/probe/components/divider.tsx",
+      "sha256": "1ca38d68bfca967cfb4a3b8f578e7356c1fe28087e360f5ee7c7c51cf471da4f",
+      "destination": "packages/ui/src/components/divider.tsx",
+      "gitBlob": "ea18b6298992d8913d616d032d6128ff7ef074fa"
+    },
+    {
+      "source": "src/packages/probe/components/dropdown-menu.tsx",
+      "sha256": "3c58235c863c236a7006af2b0a9b1e2aa93e6190595de860636c581139736508",
+      "destination": "packages/ui/src/components/dropdown-menu.tsx",
+      "gitBlob": "02e3db562b305b66b147bcce50afe3c11d6a0c5f"
+    },
+    {
+      "source": "src/packages/probe/components/empty-state.tsx",
+      "sha256": "e3e3786cb3590f304039ef73e9c9001106b59427ef2a252e7a117cc0d413ab7a",
+      "destination": "packages/ui/src/components/empty-state.tsx",
+      "gitBlob": "334a24dca0ea4874e8e5b3df2b99f5a66dd2fa6c"
+    },
+    {
+      "source": "src/packages/probe/components/kbd.tsx",
+      "sha256": "42de3e1108724979c701b241afbd58fbbb09eb5a321d230b6f78b1944dd7c2a7",
+      "destination": "packages/ui/src/components/kbd.tsx",
+      "gitBlob": "dcfe7709876238dff634147f77b92f9ab0588525"
+    },
+    {
+      "source": "src/packages/probe/components/popover.tsx",
+      "sha256": "e27b231580c3ab34e74da22726adf6112864344abc40acf7eaefbf19d2f94a05",
+      "destination": "packages/ui/src/components/popover.tsx",
+      "gitBlob": "3b2b8036bd9f28066e57da2d4c88d9e415334246"
+    },
+    {
+      "source": "src/packages/probe/components/select.tsx",
+      "sha256": "18e98f84edfc8ee03ae20164c6d609872110a12e168d221df43b6c8462d34ecb",
+      "destination": "packages/ui/src/components/select.tsx",
+      "gitBlob": "9b2c00006b0869eab57d98a6538109f5f73633ae"
+    },
+    {
+      "source": "src/packages/probe/components/sheet.tsx",
+      "sha256": "07c96b2c1b63bfa34bf2bae79a8365f2cbf4d5b7367611ab8194b5595ba06913",
+      "destination": "packages/ui/src/components/sheet.tsx",
+      "gitBlob": "95060f7b33b8bbc0c981e0519468a6660c3e21d8"
+    },
+    {
+      "source": "src/packages/probe/components/skeleton.tsx",
+      "sha256": "0f8380409db39e2da00c741f1fd7396b2b3ff955e71383254cfca8a3da2382ff",
+      "destination": "packages/ui/src/components/skeleton.tsx",
+      "gitBlob": "87864f2749e58b7016ab5d91cc7534991c5dd21e"
+    },
+    {
+      "source": "src/packages/probe/components/textarea.tsx",
+      "sha256": "fcbf1a240ae49458ea351f084b89b1cd56c8e13d8d3516f57c9d7adb97f5fb8a",
+      "destination": "packages/ui/src/components/textarea.tsx",
+      "gitBlob": "f321bc37555601015b69ad440ea6533d46f05b1f"
+    },
+    {
+      "source": "src/packages/probe/components/tooltip.tsx",
+      "sha256": "23b647947f8d035eda0f56ad1cc48a0f6c405ba5a35d3f9a29a5da4e284382bd",
+      "destination": "packages/ui/src/components/tooltip.tsx",
+      "gitBlob": "95cb05ef4ad23b7bda935d9e708568bfd489ef99"
+    },
+    {
+      "source": "src/lib/utils.ts",
+      "sha256": "9dcf80e5c89e358a79d10520fbb0b137b582225a901af8747f76edd18612aab6",
+      "destination": "packages/explorer/src/cloud/lib/utils.ts",
+      "symbols": ["isDateType", "isNumberType"],
+      "gitBlob": "85f7403c0b91da20d0f23e881f0b8f934353189a"
+    },
+    {
+      "source": "src/components/query-editor/ReviewQueryEditor.tsx",
+      "sha256": "8ff2cbca7e49360280df7262f10e82eb352efdaa0cdf1eb90a96238e169e11c4",
+      "destination": "packages/explorer/src/editor/code-editor.tsx",
+      "gitBlob": "8da0b570b450303270aadf10ef3ec45810b20e45"
+    },
+    {
+      "source": "src/components/query-editor/MonacoEditor.tsx",
+      "sha256": "233ca95d9957295e97bf05343ea9bc60e4c4da1246da3f1f7dddfdf0545e48ea",
+      "destination": "packages/explorer/src/editor/code-editor.tsx",
+      "gitBlob": "e865c425357f8b0612b645e02f1bfcef72fd67eb"
+    },
+    {
+      "source": "src/components/query-editor/helper/options.ts",
+      "sha256": "c0da20e20f32265457a574cf2ee1f942d652a5c1c376399f5efcffeed61fc165",
+      "destination": "packages/explorer/src/editor/options.ts",
+      "gitBlob": "c8caba5a02b95051f9b3453a2abcd310a28adb4f"
+    },
+    {
+      "source": "src/components/query-editor/helper/selection.ts",
+      "sha256": "a966f776e60c8afc597c13cbafe70e08533a540781d3a01aee46a4b01a4262ab",
+      "destination": "packages/explorer/src/editor/selection.ts",
+      "gitBlob": "6153500fff3a8b11e81ca13fc0321cafd08b9400"
+    },
+    {
+      "source": "src/components/query-editor/helper/snippet.ts",
+      "sha256": "214a8c6864abb599885f428b338f1f05a5d6b4ad3606e4f648e247ed4fe67085",
+      "destination": "packages/explorer/src/editor/snippet.ts",
+      "gitBlob": "fe6686091c39e3e5b46e533072de3b576757d63d"
+    },
+    {
+      "source": "src/components/query-editor/helper/completion.ts",
+      "sha256": "42483ade22497fe7f0fa0d319badc9754f826c615796723807fdc7e018a060ac",
+      "destination": "packages/explorer/src/editor/completion.ts",
+      "gitBlob": "561500e9f45e9c103534b247f99c737510b7a27b"
+    },
+    {
+      "source": "src/components/query-editor/helper/types.ts",
+      "sha256": "05f0dfc27f4a8089f96b1fc24747efc9a6c4d8a461860ffe27aa1efb927ec4da",
+      "destination": "packages/explorer/src/editor/types.ts",
+      "gitBlob": "b398cf00ac86b0e1f38deafd46fe8e107cc64b13"
+    }
+  ]
+}

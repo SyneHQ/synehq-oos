@@ -1,0 +1,32 @@
+{
+  "name": "@synehq-oos/explorer",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "dependencies": {
+    "@synehq-oos/ui": "0.1.0",
+    "@synehq-oos/explorer-contracts": "0.1.0",
+    "@dagrejs/dagre": "1.1.5",
+    "lucide-react": "0.544.0",
+    "reactflow": "11.11.4",
+    "@monaco-editor/react": "4.7.0",
+    "monaco-editor": "0.53.0",
+    "@radix-ui/react-dialog": "1.1.15",
+    "@radix-ui/react-direction": "1.1.1",
+    "@radix-ui/react-icons": "1.3.2",
+    "@radix-ui/react-select": "2.2.6",
+    "@radix-ui/react-slot": "1.2.4",
+    "@tanstack/react-table": "8.21.3",
+    "@tanstack/react-virtual": "3.13.12",
+    "cmdk": "1.1.1",
+    "sonner": "2.0.7"
+  },
+  "peerDependencies": {
+    "react": "^19",
+    "react-dom": "^19"
+  }
+}

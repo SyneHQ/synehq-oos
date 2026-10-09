@@ -1,0 +1,1608 @@
+import { Prisma, PrismaClient, type Connection, type Execution } from "@prisma/client";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
+import { z } from "zod";
+import type {
+  ConnectionSummary,
+  OwnerSummary,
+  OperationStatus,
+} from "@synehq-oos/explorer-contracts";
+import {
+  encodeOperation,
+  operationDigest as kelvoOperationDigest,
+  validateResponse,
+  validateAdmissionRejection,
+  type AdmissionRejection,
+  type OperationRequest,
+  type OperationResponse,
+  type GrantClaims,
+} from "@synehq-oos/kelvo-client";
+import {
+  activateEncryptionKey,
+  decryptSecret,
+  encryptSecret,
+  existingInstallationId,
+  initializeRuntimeKeys,
+  keyDirectory,
+  replaceSessionSecret,
+  runtimeIdentity,
+} from "../crypto/keyring";
+import { hashPassword, verifyPassword } from "../crypto/password";
+import { StoreError, unauthorized } from "./errors";
+import { configureMetadataClient } from "./database";
+import type {
+  AiSettingsInput,
+  AiSettingsSummary,
+  BeginExecutionInput,
+  ConnectionCredentials,
+  ConnectionInput,
+  ConnectionUpdate,
+  ExecutionAuthority,
+  ExecutionCustody,
+  ExecutionScope,
+  OwnerIdentity,
+  QueryApprovalInput,
+} from "./types";
+
+type Db = PrismaClient | Prisma.TransactionClient;
+export type ExecutionRecord = Execution;
+const OWNER_ID = "owner";
+const SESSION_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const SESSION_IDLE_MS = 30 * 60 * 1000;
+const APPROVAL_AGE_MS = 5 * 60 * 1000;
+const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
+const idSchema = z.string().min(1).max(128);
+const credentialsSchema = z
+  .object({
+    password: z.string().max(8192),
+    tlsCa: z.string().max(16384).optional(),
+    tlsClientCert: z.string().max(16384).optional(),
+    tlsClientKey: z.string().max(16384).optional(),
+  })
+  .strict();
+const connectionSchema = z
+  .object({
+    label: z.string().trim().min(1).max(128),
+    engine: z.enum(["postgres", "mysql"]),
+    host: z
+      .string()
+      .trim()
+      .min(1)
+      .max(253)
+      .refine(
+        (host) => !/[\s/@?#\\\x00]/.test(host),
+        "Enter a hostname or IP address, without a URL or credentials.",
+      ),
+    port: z.number().int().min(1).max(65535),
+    database: z.string().trim().min(1).max(256),
+    username: z.string().max(256),
+    tlsMode: z
+      .literal("verify-full", {
+        errorMap: () => ({
+          message:
+            "This release requires verified TLS. Insecure database connections are not supported.",
+        }),
+      })
+      .default("verify-full"),
+    readOnly: z.boolean().default(true),
+    password: z.string().max(8192).optional(),
+    tlsCa: z.string().max(16384).optional(),
+  })
+  .strict();
+const scopeSchema = z
+  .object({
+    connectionId: idSchema,
+    connectionRevision: z.number().int().positive(),
+    database: z.string().min(1).max(256),
+    schema: z.string().max(256).nullable(),
+    operationDigest: digestSchema,
+    executionEpoch: idSchema,
+  })
+  .strict();
+const terminalStatuses = new Set<OperationStatus>(["succeeded", "failed", "cancelled", "unknown"]);
+function activeExecutions(ownerId: string): Prisma.ExecutionWhereInput {
+  return {
+    ownerId,
+    OR: [
+      { status: { in: ["queued", "running"] } },
+      { status: "unknown", dispatchedAt: { not: null }, custodyCompletedAt: null },
+    ],
+  };
+}
+
+function summary(row: Connection): ConnectionSummary {
+  return {
+    id: row.id,
+    label: row.label,
+    engine: row.engine as ConnectionSummary["engine"],
+    host: row.host,
+    port: row.port,
+    database: row.database,
+    username: row.username,
+    tlsMode: row.tlsMode as ConnectionSummary["tlsMode"],
+    readOnly: row.readOnly,
+    revision: row.revision,
+    hasSecret: row.credentials !== null,
+  };
+}
+function ownerSummary(row: { id: string; name: string; email: string }): OwnerSummary {
+  return { id: row.id, name: row.name, email: row.email };
+}
+function scopeDigest(owner: OwnerIdentity, scope: ExecutionScope): string {
+  return hash(
+    JSON.stringify([
+      owner.id,
+      owner.sessionId,
+      owner.authVersion,
+      scope.connectionId,
+      scope.connectionRevision,
+      scope.database,
+      scope.schema,
+      scope.operationDigest,
+      scope.executionEpoch,
+    ]),
+  );
+}
+function scopeOnly(value: ExecutionScope): ExecutionScope {
+  return {
+    connectionId: value.connectionId,
+    connectionRevision: value.connectionRevision,
+    database: value.database,
+    schema: value.schema,
+    operationDigest: value.operationDigest,
+    executionEpoch: value.executionEpoch,
+  };
+}
+async function audit(
+  db: Db,
+  actor: string,
+  action: string,
+  target: string,
+  outcome = "success",
+): Promise<void> {
+  await db.actionLog.create({ data: { id: randomUUID(), actor, action, target, outcome } });
+}
+
+export class AppStore {
+  constructor(
+    readonly db: PrismaClient,
+    readonly keys = keyDirectory(),
+    private readonly clock: () => Date = () => new Date(),
+  ) {}
+
+  private async transaction<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+    await configureMetadataClient(this.db);
+    return this.db.$transaction(work, {
+      maxWait: 10_000,
+      timeout: 10_000,
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
+  }
+
+  async getInstance() {
+    await configureMetadataClient(this.db);
+    const instance = await this.db.instance.findUnique({ where: { id: 1 } });
+    if (!instance)
+      throw new StoreError(
+        503,
+        "Initialize the installation with the local command.",
+        "INITIALIZATION_REQUIRED",
+      );
+    runtimeIdentity(instance.installationId, this.keys);
+    return instance;
+  }
+
+  async initializeMetadata(): Promise<{ installationId: string }> {
+    await configureMetadataClient(this.db);
+    const existing = await this.db.instance.findUnique({ where: { id: 1 } });
+    if (existing) {
+      runtimeIdentity(existing.installationId, this.keys);
+      return { installationId: existing.installationId };
+    }
+    if ((await this.db.owner.count()) || (await this.db.connection.count())) {
+      throw new StoreError(
+        503,
+        "Installation metadata is incomplete. Restore a validated backup.",
+        "RECOVERY_REQUIRED",
+      );
+    }
+    const installationId = existingInstallationId(this.keys) ?? randomUUID();
+    initializeRuntimeKeys(installationId, this.keys);
+    await this.transaction(async (tx) => {
+      await tx.instance.create({ data: { id: 1, installationId, executionEpoch: randomUUID() } });
+      await audit(tx, "local-operator", "installation.initialize", installationId);
+    });
+    return { installationId };
+  }
+
+  async setupStatus(): Promise<{
+    initialized: boolean;
+    allowSignup: boolean;
+    recoveryRequired: boolean;
+  }> {
+    await configureMetadataClient(this.db);
+    const instance = await this.db.instance.findUnique({ where: { id: 1 } });
+    const owner = await this.db.owner.findUnique({ where: { id: OWNER_ID } });
+    return {
+      initialized: Boolean(instance?.initializedAt),
+      allowSignup: process.env.ALLOW_SIGNUP !== "false" && !instance?.initializedAt,
+      recoveryRequired:
+        Boolean(
+          instance?.initializedAt && (!owner || owner.deletedAt || owner.status !== "active"),
+        ) || Boolean(!instance && owner),
+    };
+  }
+
+  async issueSetupToken(): Promise<{ token: string; expiresAt: Date }> {
+    await this.getInstance();
+    const token = randomBytes(32).toString("base64url");
+    const expiresAt = new Date(this.clock().getTime() + 30 * 60 * 1000);
+    await this.transaction(async (tx) => {
+      const claimed = await tx.instance.updateMany({
+        where: { id: 1, initializedAt: null, maintenance: false },
+        data: { setupTokenHash: hash(token), setupExpiresAt: expiresAt },
+      });
+      if (claimed.count !== 1) throw new StoreError(409, "Initial setup is already complete.");
+      await audit(tx, "local-operator", "setup.token.issue", "instance");
+    });
+    return { token, expiresAt };
+  }
+
+  async createOwner(input: {
+    token: string;
+    email: string;
+    name: string;
+    password: string;
+  }): Promise<OwnerSummary> {
+    if (process.env.ALLOW_SIGNUP === "false")
+      throw new StoreError(403, "Web setup is disabled. Use the local owner setup command.");
+    return this.completeOwnerSetup(input, false);
+  }
+
+  /** This method is for the local interactive CLI. It is never a web route. */
+  async createOwnerLocally(input: {
+    email: string;
+    name: string;
+    password: string;
+  }): Promise<OwnerSummary> {
+    return this.completeOwnerSetup({ ...input, token: "" }, true);
+  }
+
+  private async completeOwnerSetup(
+    input: { token: string; email: string; name: string; password: string },
+    local: boolean,
+  ): Promise<OwnerSummary> {
+    const body = z
+      .object({
+        token: z.string().max(256),
+        email: z
+          .string()
+          .trim()
+          .email()
+          .max(254)
+          .transform((v) => v.toLowerCase()),
+        name: z.string().trim().min(1).max(128),
+        password: z.string(),
+      })
+      .strict()
+      .parse(input);
+    const instance = await this.getInstance();
+    const tokenHash = hash(body.token);
+    if (instance.initializedAt || instance.maintenance)
+      throw new StoreError(409, "Initial setup is already complete or unavailable.");
+    if (
+      !local &&
+      (!/^[A-Za-z0-9_-]{43}$/.test(body.token) ||
+        !instance.setupTokenHash ||
+        !instance.setupExpiresAt ||
+        instance.setupExpiresAt <= this.clock() ||
+        !timingSafeEqual(
+          Buffer.from(tokenHash, "hex"),
+          Buffer.from(instance.setupTokenHash, "hex"),
+        ))
+    ) {
+      throw new StoreError(403, "The setup token is invalid or expired.");
+    }
+    const passwordHash = await hashPassword(body.password);
+    return this.transaction(async (tx) => {
+      const now = this.clock();
+      const claimed = await tx.instance.updateMany({
+        where: {
+          id: 1,
+          initializedAt: null,
+          maintenance: false,
+          ...(local ? {} : { setupTokenHash: tokenHash, setupExpiresAt: { gt: now } }),
+        },
+        data: { initializedAt: now, setupTokenHash: null, setupExpiresAt: null },
+      });
+      if (claimed.count !== 1)
+        throw new StoreError(409, "Another request completed setup or the token expired.");
+      const owner = await tx.owner.create({
+        data: { id: OWNER_ID, email: body.email, name: body.name, passwordHash },
+      });
+      await audit(tx, OWNER_ID, "owner.create", OWNER_ID);
+      return ownerSummary(owner);
+    });
+  }
+
+  private async takeLoginAttempt(): Promise<boolean> {
+    return this.transaction(async (tx) => {
+      const now = this.clock(),
+        cutoff = new Date(now.getTime() - 5 * 60 * 1000);
+      await tx.loginThrottle.upsert({
+        where: { id: "owner-password" },
+        create: { id: "owner-password", count: 0, windowStart: now },
+        update: {},
+      });
+      await tx.loginThrottle.updateMany({
+        where: { id: "owner-password", windowStart: { lte: cutoff } },
+        data: { count: 0, windowStart: now },
+      });
+      return (
+        (
+          await tx.loginThrottle.updateMany({
+            where: { id: "owner-password", count: { lt: 10 } },
+            data: { count: { increment: 1 } },
+          })
+        ).count === 1
+      );
+    });
+  }
+
+  async authenticateOwner(email: string, password: string): Promise<OwnerIdentity | null> {
+    if (
+      typeof email !== "string" ||
+      email.length > 254 ||
+      typeof password !== "string" ||
+      Buffer.byteLength(password) > 1024 ||
+      !(await this.takeLoginAttempt())
+    )
+      return null;
+    const owner = await this.db.owner.findUnique({ where: { id: OWNER_ID } });
+    const instance = await this.db.instance.findUnique({ where: { id: 1 } });
+    if (
+      !owner ||
+      owner.deletedAt ||
+      owner.status !== "active" ||
+      !instance?.initializedAt ||
+      instance.maintenance
+    )
+      return null;
+    const valid = await verifyPassword(password, owner.passwordHash);
+    if (!valid || owner.email !== email.trim().toLowerCase()) return null;
+    return this.transaction(async (tx) => {
+      const current = await tx.owner.findFirst({
+        where: {
+          id: OWNER_ID,
+          authVersion: owner.authVersion,
+          passwordHash: owner.passwordHash,
+          deletedAt: null,
+          status: "active",
+        },
+      });
+      const activeInstance = await tx.instance.findFirst({
+        where: { id: 1, initializedAt: { not: null }, maintenance: false },
+      });
+      if (!current || !activeInstance) return null;
+      const now = this.clock();
+      const session = await tx.ownerSession.create({
+        data: {
+          id: randomUUID(),
+          ownerId: OWNER_ID,
+          authVersion: owner.authVersion,
+          lastSeenAt: now,
+          expiresAt: new Date(now.getTime() + SESSION_AGE_MS),
+        },
+      });
+      await tx.loginThrottle.deleteMany({ where: { id: "owner-password" } });
+      await audit(tx, OWNER_ID, "owner.login", session.id);
+      return { ...ownerSummary(owner), authVersion: owner.authVersion, sessionId: session.id };
+    });
+  }
+
+  private async checkOwner(
+    db: Db,
+    identity: Pick<OwnerIdentity, "id" | "authVersion" | "sessionId">,
+    allowMaintenance = false,
+  ): Promise<OwnerIdentity> {
+    await configureMetadataClient(this.db);
+    if (
+      identity.id !== OWNER_ID ||
+      !Number.isSafeInteger(identity.authVersion) ||
+      typeof identity.sessionId !== "string" ||
+      identity.sessionId.length > 128
+    )
+      unauthorized();
+    const now = this.clock();
+    const owner = await db.owner.findFirst({
+      where: { id: OWNER_ID, authVersion: identity.authVersion, status: "active", deletedAt: null },
+    });
+    const session = await db.ownerSession.findFirst({
+      where: {
+        id: identity.sessionId,
+        ownerId: OWNER_ID,
+        authVersion: identity.authVersion,
+        revokedAt: null,
+        expiresAt: { gt: now },
+        lastSeenAt: { gt: new Date(now.getTime() - SESSION_IDLE_MS) },
+      },
+    });
+    const instance = await db.instance.findUnique({ where: { id: 1 } });
+    if (!owner || !session || !instance?.initializedAt) unauthorized();
+    if (instance.maintenance && !allowMaintenance)
+      throw new StoreError(503, "The installation is in maintenance mode.", "MAINTENANCE");
+    return { ...ownerSummary(owner), authVersion: owner.authVersion, sessionId: session.id };
+  }
+
+  async assertOwnerIdentity(
+    identity: Pick<OwnerIdentity, "id" | "authVersion" | "sessionId">,
+  ): Promise<OwnerIdentity> {
+    const owner = await this.checkOwner(this.db, identity);
+    const now = this.clock();
+    await this.db.ownerSession.updateMany({
+      where: {
+        id: owner.sessionId,
+        revokedAt: null,
+        lastSeenAt: { lt: new Date(now.getTime() - 60_000) },
+      },
+      data: { lastSeenAt: now },
+    });
+    return owner;
+  }
+
+  async revokeSession(sessionId: string): Promise<void> {
+    await this.transaction(async (tx) => {
+      await tx.ownerSession.updateMany({
+        where: { id: sessionId, revokedAt: null },
+        data: { revokedAt: this.clock() },
+      });
+      await tx.queryApproval.updateMany({
+        where: { sessionId, consumedAt: null },
+        data: { consumedAt: this.clock() },
+      });
+      await audit(tx, OWNER_ID, "owner.logout", sessionId);
+    });
+  }
+
+  async recoverOwnerPassword(password: string): Promise<void> {
+    await this.getInstance();
+    const passwordHash = await hashPassword(password);
+    await this.transaction(async (tx) => {
+      const instance = await tx.instance.findUnique({ where: { id: 1 } });
+      if (!instance?.initializedAt)
+        throw new StoreError(409, "Complete initial setup before using password recovery.");
+      const result = await tx.owner.updateMany({
+        where: { id: OWNER_ID, deletedAt: null },
+        data: { passwordHash, authVersion: { increment: 1 }, status: "active" },
+      });
+      if (result.count !== 1)
+        throw new StoreError(
+          503,
+          "The owner record is missing. Restore a validated metadata backup.",
+          "RECOVERY_REQUIRED",
+        );
+      await tx.ownerSession.updateMany({
+        where: { revokedAt: null },
+        data: { revokedAt: this.clock() },
+      });
+      await tx.queryApproval.updateMany({
+        where: { consumedAt: null },
+        data: { consumedAt: this.clock() },
+      });
+      await tx.loginThrottle.deleteMany();
+      await audit(tx, "local-operator", "owner.password.recover", OWNER_ID);
+    });
+  }
+
+  async changeOwnerPassword(
+    owner: OwnerIdentity,
+    currentPassword: string,
+    nextPassword: string,
+  ): Promise<void> {
+    await this.checkOwner(this.db, owner);
+    const current = await this.db.owner.findUniqueOrThrow({ where: { id: OWNER_ID } });
+    if (!(await verifyPassword(currentPassword, current.passwordHash)))
+      throw new StoreError(403, "The current password is incorrect.");
+    const passwordHash = await hashPassword(nextPassword);
+    await this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      const result = await tx.owner.updateMany({
+        where: { id: OWNER_ID, authVersion: owner.authVersion, passwordHash: current.passwordHash },
+        data: { passwordHash, authVersion: { increment: 1 } },
+      });
+      if (result.count !== 1) unauthorized();
+      await tx.ownerSession.updateMany({
+        where: { ownerId: OWNER_ID, revokedAt: null },
+        data: { revokedAt: this.clock() },
+      });
+      await tx.queryApproval.updateMany({
+        where: { consumedAt: null },
+        data: { consumedAt: this.clock() },
+      });
+      await audit(tx, OWNER_ID, "owner.password.change", OWNER_ID);
+    });
+  }
+
+  private async connection(
+    db: Db,
+    owner: OwnerIdentity,
+    id: string,
+    expectedRevision?: number,
+  ): Promise<Connection> {
+    idSchema.parse(id);
+    const row = await db.connection.findFirst({
+      where: { id, ownerId: owner.id, deletedAt: null },
+    });
+    if (!row) throw new StoreError(404, "Connection not found.");
+    if (expectedRevision !== undefined && row.revision !== expectedRevision)
+      throw new StoreError(
+        409,
+        "The connection changed. Refresh it before continuing.",
+        "CONNECTION_CHANGED",
+      );
+    return row;
+  }
+
+  async listConnections(owner: OwnerIdentity): Promise<ConnectionSummary[]> {
+    await this.checkOwner(this.db, owner);
+    return (
+      await this.db.connection.findMany({
+        where: { ownerId: owner.id, deletedAt: null },
+        orderBy: { label: "asc" },
+      })
+    ).map(summary);
+  }
+
+  async getConnection(owner: OwnerIdentity, id: string): Promise<ConnectionSummary> {
+    await this.checkOwner(this.db, owner);
+    return summary(await this.connection(this.db, owner, id));
+  }
+
+  async createConnection(owner: OwnerIdentity, input: ConnectionInput): Promise<ConnectionSummary> {
+    const body = connectionSchema.parse(input);
+    const instance = await this.getInstance(),
+      id = randomUUID();
+    const { password = "", tlsCa, ...fields } = body;
+    const credentials = encryptSecret(
+      { password, tlsCa },
+      { installationId: instance.installationId, recordId: id, purpose: "connection" },
+      this.keys,
+    );
+    return this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      const row = await tx.connection.create({
+        data: { id, ownerId: owner.id, ...fields, credentials },
+      });
+      await audit(tx, owner.id, "connection.create", id);
+      return summary(row);
+    });
+  }
+
+  async updateConnection(
+    owner: OwnerIdentity,
+    id: string,
+    input: ConnectionUpdate,
+  ): Promise<ConnectionSummary> {
+    const update = connectionSchema
+      .partial()
+      .extend({ revision: z.number().int().positive() })
+      .strict()
+      .parse(input);
+    const instance = await this.getInstance();
+    return this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      const current = await this.connection(tx, owner, id, update.revision);
+      const { revision, password, tlsCa, ...fields } = update;
+      const secretFields = { password, tlsCa };
+      let credentials = current.credentials;
+      if (Object.values(secretFields).some((value) => value !== undefined)) {
+        if (!credentials) throw new StoreError(503, "Connection credentials are unavailable.");
+        const scope = {
+          installationId: instance.installationId,
+          recordId: id,
+          purpose: "connection",
+        };
+        const previous = credentialsSchema.parse(decryptSecret(credentials, scope, this.keys));
+        const changes = Object.fromEntries(
+          Object.entries(secretFields).filter(([, value]) => value !== undefined),
+        );
+        credentials = encryptSecret({ ...previous, ...changes }, scope, this.keys);
+      }
+      const changed = await tx.connection.updateMany({
+        where: { id, ownerId: owner.id, revision, deletedAt: null },
+        data: { ...fields, credentials, revision: { increment: 1 } },
+      });
+      if (changed.count !== 1)
+        throw new StoreError(409, "The connection changed. Refresh it before continuing.");
+      await tx.queryApproval.updateMany({
+        where: { connectionId: id, consumedAt: null },
+        data: { consumedAt: this.clock() },
+      });
+      await audit(tx, owner.id, "connection.update", id);
+      return summary(await tx.connection.findUniqueOrThrow({ where: { id } }));
+    });
+  }
+
+  async deleteConnection(owner: OwnerIdentity, id: string): Promise<void> {
+    await this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      await this.connection(tx, owner, id);
+      await tx.connection.update({
+        where: { id },
+        data: { deletedAt: this.clock(), credentials: null, revision: { increment: 1 } },
+      });
+      await tx.queryApproval.updateMany({
+        where: { connectionId: id, consumedAt: null },
+        data: { consumedAt: this.clock() },
+      });
+      await audit(tx, owner.id, "connection.delete", id);
+    });
+  }
+
+  async decryptConnection(
+    owner: OwnerIdentity,
+    id: string,
+    expectedRevision?: number,
+  ): Promise<ConnectionSummary & ConnectionCredentials> {
+    return this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      const row = await this.connection(tx, owner, id, expectedRevision);
+      const instance = await tx.instance.findUniqueOrThrow({ where: { id: 1 } });
+      if (!row.credentials) throw new StoreError(503, "Connection credentials are unavailable.");
+      const credentials = credentialsSchema.parse(
+        decryptSecret(
+          row.credentials,
+          { installationId: instance.installationId, recordId: id, purpose: "connection" },
+          this.keys,
+        ),
+      );
+      return { ...summary(row), ...credentials };
+    });
+  }
+
+  private async checkScope(
+    db: Db,
+    owner: OwnerIdentity,
+    scope: ExecutionScope,
+  ): Promise<Connection> {
+    scopeSchema.parse(scopeOnly(scope));
+    await this.checkOwner(db, owner);
+    const row = await this.connection(db, owner, scope.connectionId, scope.connectionRevision);
+    const instance = await db.instance.findUniqueOrThrow({ where: { id: 1 } });
+    if (instance.executionEpoch !== scope.executionEpoch)
+      throw new StoreError(
+        409,
+        "This operation belongs to an old installation state.",
+        "EXECUTION_EPOCH_CHANGED",
+      );
+    // Selecting another database requires its own stored connection and reviewed credentials.
+    if (scope.database !== row.database)
+      throw new StoreError(403, "The operation database does not match this connection.");
+    return row;
+  }
+
+  async createQueryApproval(
+    owner: OwnerIdentity,
+    input: QueryApprovalInput,
+  ): Promise<{ token: string; expiresAt: Date; approvalId: string; operationId: string }> {
+    const scope = scopeOnly(input);
+    const approvalId = idSchema.parse(input.approvalId),
+      operationId = idSchema.parse(input.operationId);
+    const token = randomBytes(32).toString("base64url"),
+      expiresAt = new Date(this.clock().getTime() + APPROVAL_AGE_MS);
+    await this.transaction(async (tx) => {
+      const connection = await this.checkScope(tx, owner, scope);
+      if (connection.readOnly)
+        throw new StoreError(403, "Enable writes for this connection before approving a write.");
+      await tx.queryApproval.create({
+        data: {
+          id: approvalId,
+          operationId,
+          tokenHash: hash(token),
+          ownerId: owner.id,
+          sessionId: owner.sessionId,
+          authVersion: owner.authVersion,
+          connectionId: scope.connectionId,
+          connectionRevision: scope.connectionRevision,
+          executionEpoch: scope.executionEpoch,
+          scopeDigest: scopeDigest(owner, scope),
+          expiresAt,
+        },
+      });
+      await audit(tx, owner.id, "query.approval.issue", scope.connectionId);
+    });
+    return { token, expiresAt, approvalId, operationId };
+  }
+
+  async checkQueryApproval(
+    owner: OwnerIdentity,
+    input: QueryApprovalInput & { token: string },
+  ): Promise<void> {
+    return this.transaction(async (tx) => {
+      const scope = scopeOnly(input);
+      await this.checkScope(tx, owner, scope);
+      const existing = await tx.execution.findUnique({ where: { operationId: input.operationId } });
+      if (
+        existing &&
+        existing.ownerId === owner.id &&
+        existing.sessionId === owner.sessionId &&
+        existing.authVersion === owner.authVersion &&
+        existing.approvalId === input.approvalId &&
+        scopeDigest(owner, existing) === scopeDigest(owner, scope)
+      )
+        return;
+      const approval = await tx.queryApproval.findFirst({
+        where: {
+          id: input.approvalId,
+          operationId: input.operationId,
+          tokenHash: hash(input.token),
+          ownerId: owner.id,
+          sessionId: owner.sessionId,
+          authVersion: owner.authVersion,
+          scopeDigest: scopeDigest(owner, scope),
+          executionEpoch: scope.executionEpoch,
+          consumedAt: null,
+          expiresAt: { gt: this.clock() },
+        },
+      });
+      if (!approval)
+        throw new StoreError(
+          403,
+          "The approval expired, changed, or was already consumed.",
+          "APPROVAL_INVALID",
+        );
+    });
+  }
+
+  async beginExecution(
+    owner: OwnerIdentity,
+    input: BeginExecutionInput,
+  ): Promise<{ created: boolean; record: ExecutionRecord }> {
+    const body = scopeSchema
+      .extend({
+        operationId: idSchema,
+        requestJson: z
+          .string()
+          .min(2)
+          .max(256 * 1024),
+        write: z.boolean(),
+        approvalToken: z.string().max(256).optional(),
+        approvalId: idSchema.optional(),
+        grantIssuedAt: z.number().int().positive(),
+        grantExpiresAt: z.number().int().positive(),
+        grantDigest: digestSchema,
+        claimsJson: z.string().min(2).max(16384),
+        sql: z.string().max(100_000).optional(),
+      })
+      .strict()
+      .parse(input);
+    const request = JSON.parse(body.requestJson) as OperationRequest;
+    const claims = JSON.parse(body.claimsJson) as GrantClaims;
+    if (Buffer.byteLength(body.requestJson) > 256 * 1024)
+      throw new StoreError(413, "The operation request is too large.");
+    if (
+      encodeOperation(request) !== body.requestJson ||
+      kelvoOperationDigest(request) !== body.operationDigest
+    )
+      throw new StoreError(
+        400,
+        "The operation digest does not match its canonical stored request.",
+      );
+    if (
+      (body.write || request.idempotency_key !== "") &&
+      request.idempotency_key !== body.operationId
+    )
+      throw new StoreError(400, "The operation ID does not match its idempotency key.");
+    if (
+      request.connection.id !== body.connectionId ||
+      request.connection.database !== body.database ||
+      (request.connection.schema ?? null) !== body.schema ||
+      (request.kind === "statement.execute") !== body.write ||
+      (request.approval_id ?? null) !== (body.approvalId ?? null)
+    )
+      throw new StoreError(400, "The stored operation scope does not match the request.");
+    if (
+      claims.jti !== body.operationId ||
+      claims.subject?.id !== owner.id ||
+      claims.connection_id !== body.connectionId ||
+      claims.request_sha256 !== body.operationDigest ||
+      claims.operation !== request.kind ||
+      claims.iat !== body.grantIssuedAt ||
+      claims.exp !== body.grantExpiresAt ||
+      (body.write
+        ? claims.authorization?.kind !== "approved_change" ||
+          claims.authorization.approval_id !== body.approvalId ||
+          claims.authorization.approved_sha256 !== body.operationDigest
+        : claims.authorization?.kind !== "read")
+    ) {
+      throw new StoreError(400, "The grant claims do not match the stored operation.");
+    }
+    const { connectionId, connectionRevision, database, schema, operationDigest, executionEpoch } =
+      body;
+    const scope: ExecutionScope = {
+      connectionId,
+      connectionRevision,
+      database,
+      schema,
+      operationDigest,
+      executionEpoch,
+    };
+    return this.transaction(async (tx) => {
+      const connection = await this.checkScope(tx, owner, scope);
+      const existing = await tx.execution.findUnique({ where: { operationId: body.operationId } });
+      if (existing) {
+        if (
+          existing.ownerId !== owner.id ||
+          existing.sessionId !== owner.sessionId ||
+          existing.authVersion !== owner.authVersion ||
+          existing.operationDigest !== body.operationDigest ||
+          existing.requestJson !== body.requestJson ||
+          existing.executionEpoch !== body.executionEpoch ||
+          existing.connectionId !== body.connectionId ||
+          existing.connectionRevision !== body.connectionRevision ||
+          existing.write !== body.write ||
+          existing.database !== body.database ||
+          existing.schema !== body.schema ||
+          existing.approvalId !== (body.approvalId ?? null)
+        )
+          throw new StoreError(409, "The operation ID already belongs to another request.");
+        return { created: false, record: existing };
+      }
+      const now = this.clock(),
+        seconds = Math.floor(now.getTime() / 1000);
+      if (
+        body.grantIssuedAt > seconds + 10 ||
+        body.grantExpiresAt <= seconds ||
+        body.grantExpiresAt - body.grantIssuedAt > 300
+      )
+        throw new StoreError(400, "The operation grant is expired or exceeds its lifetime limit.");
+      const expired = await tx.execution.findMany({
+        where: {
+          ownerId: owner.id,
+          status: "queued",
+          dispatchedAt: null,
+          grantExpiresAt: { lte: seconds },
+        },
+        select: { operationId: true },
+      });
+      for (const row of expired) {
+        await tx.execution.update({
+          where: { operationId: row.operationId },
+          data: {
+            status: "failed",
+            error: "The operation grant expired before dispatch.",
+            completedAt: now,
+          },
+        });
+        await audit(tx, owner.id, "query.expired-before-dispatch", row.operationId, "failed");
+      }
+      // A transport deadline does not prove that the database operation stopped.
+      const active = activeExecutions(owner.id);
+      if (
+        (await tx.execution.count({ where: { ...active, connectionId: body.connectionId } })) >= 1
+      )
+        throw new StoreError(
+          429,
+          "This connection has an active operation. Wait for its outcome or confirmed cleanup.",
+          "CONNECTION_BUSY",
+        );
+      if ((await tx.execution.count({ where: active })) >= 2)
+        throw new StoreError(
+          429,
+          "This installation has two active operations. Wait for one to complete.",
+          "INSTALLATION_BUSY",
+        );
+      if (body.write) {
+        if (connection.readOnly) throw new StoreError(403, "This connection is read-only.");
+        if (!body.approvalToken || !body.approvalId)
+          throw new StoreError(
+            403,
+            "Confirm the exact operation before executing a write.",
+            "APPROVAL_REQUIRED",
+          );
+        const consumed = await tx.queryApproval.updateMany({
+          where: {
+            id: body.approvalId,
+            operationId: body.operationId,
+            tokenHash: hash(body.approvalToken),
+            ownerId: owner.id,
+            sessionId: owner.sessionId,
+            authVersion: owner.authVersion,
+            scopeDigest: scopeDigest(owner, scope),
+            executionEpoch: body.executionEpoch,
+            consumedAt: null,
+            expiresAt: { gt: now },
+          },
+          data: { consumedAt: now },
+        });
+        if (consumed.count !== 1)
+          throw new StoreError(
+            403,
+            "The approval expired, changed, or was already consumed.",
+            "APPROVAL_INVALID",
+          );
+      } else if (body.approvalToken || body.approvalId)
+        throw new StoreError(400, "A read-only operation cannot consume a write approval.");
+      const instance = await tx.instance.findUniqueOrThrow({ where: { id: 1 } });
+      const { approvalToken: _approval, sql, ...recordData } = body;
+      const record = await tx.execution.create({
+        data: {
+          ...recordData,
+          ownerId: owner.id,
+          sessionId: owner.sessionId,
+          authVersion: owner.authVersion,
+          sql: instance.historyEnabled ? (sql ?? null) : null,
+        },
+      });
+      await audit(
+        tx,
+        owner.id,
+        body.write ? "query.write.approved" : "query.read.request",
+        body.operationId,
+      );
+      return { created: true, record };
+    });
+  }
+
+  async claimExecutionDispatch(owner: OwnerIdentity, operationId: string): Promise<boolean> {
+    return this.transaction(async (tx) => {
+      const record = await tx.execution.findUnique({ where: { operationId } });
+      if (!record || record.ownerId !== owner.id || record.sessionId !== owner.sessionId)
+        throw new StoreError(404, "Operation not found.");
+      await this.checkScope(tx, owner, record);
+      if (
+        record.authVersion !== owner.authVersion ||
+        record.grantExpiresAt <= Math.floor(this.clock().getTime() / 1000)
+      )
+        throw new StoreError(403, "The operation authority expired.");
+      return (
+        (
+          await tx.execution.updateMany({
+            where: { operationId, status: "queued", dispatchedAt: null },
+            data: { status: "running", dispatchedAt: this.clock() },
+          })
+        ).count === 1
+      );
+    });
+  }
+
+  private async liveExecution(db: Db, localId: string): Promise<ExecutionRecord> {
+    const row = await db.execution.findUnique({ where: { operationId: localId } });
+    if (
+      !row ||
+      !row.dispatchedAt ||
+      !["running", "unknown"].includes(row.status) ||
+      row.custodyCompletedAt
+    )
+      throw new StoreError(403, "The operation is not authorized for credential resolution.");
+    if (row.grantExpiresAt <= Math.floor(this.clock().getTime() / 1000))
+      throw new StoreError(403, "The operation grant expired.");
+    await this.checkScope(
+      db,
+      {
+        id: row.ownerId,
+        sessionId: row.sessionId,
+        authVersion: row.authVersion,
+        name: "",
+        email: "",
+      },
+      row,
+    );
+    return row;
+  }
+
+  async authorizeExecution(authority: ExecutionAuthority): Promise<ExecutionRecord> {
+    return this.transaction(async (tx) => {
+      const row = await this.liveExecution(tx, authority.operationId);
+      if (
+        row.ownerId !== authority.id ||
+        row.authVersion !== authority.authVersion ||
+        row.sessionId !== authority.sessionId ||
+        row.connectionId !== authority.connectionId ||
+        row.connectionRevision !== authority.connectionRevision ||
+        row.executionEpoch !== authority.executionEpoch ||
+        row.operationDigest !== authority.operationDigest ||
+        row.database !== authority.database ||
+        row.schema !== authority.schema
+      )
+        throw new StoreError(403, "The operation authority does not match its request.");
+      return row;
+    });
+  }
+
+  async getExecutionForResolver(localId: string): Promise<ExecutionRecord> {
+    idSchema.parse(localId);
+    return this.transaction((tx) => this.liveExecution(tx, localId));
+  }
+
+  /** The private mTLS completion handler verifies custody before using this retained record. */
+  async getExecutionByKelvoId(remoteId: string): Promise<ExecutionRecord> {
+    await configureMetadataClient(this.db);
+    const row = await this.db.execution.findUnique({
+      where: { kelvoOperationId: idSchema.parse(remoteId) },
+    });
+    if (!row) throw new StoreError(404, "Operation not found.");
+    return row;
+  }
+
+  async setKelvoOperationId(
+    owner: OwnerIdentity,
+    localId: string,
+    remoteId: string,
+    digest: string,
+  ): Promise<ExecutionRecord> {
+    idSchema.parse(remoteId);
+    digestSchema.parse(digest);
+    return this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      const row = await tx.execution.findFirst({
+        where: { operationId: localId, ownerId: owner.id },
+      });
+      if (!row || row.operationDigest !== digest || !row.dispatchedAt)
+        throw new StoreError(403, "The submit response does not match a dispatched operation.");
+      if (row.admissionRejectionJson) throw new StoreError(409, "This operation was not admitted.");
+      if (row.kelvoOperationId && row.kelvoOperationId !== remoteId)
+        throw new StoreError(409, "The operation already has a different Kelvo ID.");
+      if (row.kelvoOperationId === remoteId) return row;
+      if (
+        (
+          await tx.execution.updateMany({
+            where: { operationId: localId, kelvoOperationId: null },
+            data: { kelvoOperationId: remoteId },
+          })
+        ).count !== 1
+      )
+        throw new StoreError(409, "The Kelvo operation ID changed.");
+      return tx.execution.findUniqueOrThrow({ where: { operationId: localId } });
+    });
+  }
+
+  private custodyMatches(row: ExecutionRecord, custody: ExecutionCustody): boolean {
+    return (
+      row.kelvoOperationId === custody.kelvoOperationId &&
+      row.operationDigest === custody.requestDigest &&
+      row.grantDigest === custody.grantDigest &&
+      row.workerId === custody.workerId &&
+      row.workerOwner === custody.workerOwner &&
+      row.claim === custody.claim
+    );
+  }
+
+  async bindExecutionCustody(localId: string, input: ExecutionCustody): Promise<ExecutionRecord> {
+    const custody = z
+      .object({
+        kelvoOperationId: idSchema,
+        requestDigest: digestSchema,
+        grantDigest: digestSchema,
+        workerId: idSchema,
+        workerOwner: idSchema,
+        claim: z.string().min(1).max(4096),
+      })
+      .strict()
+      .parse(input);
+    return this.transaction(async (tx) => {
+      const row = await this.liveExecution(tx, localId);
+      if (row.operationDigest !== custody.requestDigest || row.grantDigest !== custody.grantDigest)
+        throw new StoreError(403, "The worker custody does not match the approved request.");
+      if (row.kelvoOperationId && row.kelvoOperationId !== custody.kelvoOperationId)
+        throw new StoreError(409, "The worker operation does not match the submitted Kelvo ID.");
+      if (row.workerId !== null || row.workerOwner !== null || row.claim !== null) {
+        if (!this.custodyMatches(row, custody))
+          throw new StoreError(409, "This operation is already assigned to another worker claim.");
+        return row;
+      }
+      const changed = await tx.execution.updateMany({
+        where: {
+          operationId: localId,
+          kelvoOperationId: row.kelvoOperationId,
+          workerId: null,
+          workerOwner: null,
+          claim: null,
+          custodyCompletedAt: null,
+        },
+        data: {
+          kelvoOperationId: custody.kelvoOperationId,
+          workerId: custody.workerId,
+          workerOwner: custody.workerOwner,
+          claim: custody.claim,
+        },
+      });
+      if (changed.count !== 1) throw new StoreError(409, "The worker custody changed.");
+      return tx.execution.findUniqueOrThrow({ where: { operationId: localId } });
+    });
+  }
+
+  async completeExecutionCustody(
+    localId: string,
+    custody: ExecutionCustody,
+  ): Promise<ExecutionRecord> {
+    return this.transaction(async (tx) => {
+      const row = await tx.execution.findUnique({ where: { operationId: localId } });
+      if (!row || !this.custodyMatches(row, custody))
+        throw new StoreError(403, "The completion does not match the worker custody.");
+      if (row.custodyCompletedAt) return row;
+      return tx.execution.update({
+        where: { operationId: localId },
+        data: { custodyCompletedAt: this.clock() },
+      });
+    });
+  }
+
+  async getExecution(owner: OwnerIdentity, operationId: string): Promise<ExecutionRecord> {
+    await this.checkOwner(this.db, owner);
+    const row = await this.db.execution.findFirst({ where: { operationId, ownerId: owner.id } });
+    if (!row) throw new StoreError(404, "Operation not found.");
+    return row;
+  }
+
+  async listExecutions(owner: OwnerIdentity): Promise<ExecutionRecord[]> {
+    await this.checkOwner(this.db, owner);
+    return this.db.execution.findMany({
+      where: { ownerId: owner.id },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+  }
+
+  async listActiveExecutions(
+    owner: OwnerIdentity,
+  ): Promise<Pick<ExecutionRecord, "operationId">[]> {
+    await this.checkOwner(this.db, owner);
+    return this.db.execution.findMany({
+      where: activeExecutions(owner.id),
+      select: { operationId: true },
+      orderBy: { createdAt: "asc" },
+      take: 2,
+    });
+  }
+
+  async recordAdmissionRejection(
+    owner: OwnerIdentity,
+    operationId: string,
+    rejection: AdmissionRejection,
+  ): Promise<ExecutionRecord> {
+    return this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      const current = await tx.execution.findFirst({ where: { operationId, ownerId: owner.id } });
+      if (!current?.dispatchedAt)
+        throw new StoreError(409, "The admission rejection has no matching submission.");
+      const evidence = validateAdmissionRejection(
+        rejection,
+        current.operationDigest,
+        current.grantDigest,
+      );
+      if (current.admissionRejectionJson) {
+        if (!isDeepStrictEqual(JSON.parse(current.admissionRejectionJson), evidence))
+          throw new StoreError(409, "The confirmed admission rejection changed.");
+        return current;
+      }
+      if (
+        current.kelvoOperationId ||
+        current.receiptJson ||
+        current.workerId ||
+        current.claim ||
+        ["succeeded", "failed", "cancelled"].includes(current.status)
+      )
+        throw new StoreError(
+          409,
+          "The operation has evidence that conflicts with this admission rejection.",
+        );
+      const record = await tx.execution.update({
+        where: { operationId },
+        data: {
+          admissionRejectionJson: JSON.stringify(evidence),
+          status: "failed",
+          completedAt: this.clock(),
+          error:
+            "Kelvo did not admit this operation because capacity is unavailable. No database operation ran.",
+        },
+      });
+      await audit(tx, owner.id, "query.not-admitted", operationId, "failed");
+      return record;
+    });
+  }
+
+  async recordExecutionReceipt(
+    owner: OwnerIdentity,
+    operationId: string,
+    response: OperationResponse,
+  ): Promise<ExecutionRecord> {
+    return this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      const current = await tx.execution.findFirst({ where: { operationId, ownerId: owner.id } });
+      if (!current?.kelvoOperationId || !current.dispatchedAt)
+        throw new StoreError(409, "The receipt has no matching dispatched operation.");
+      if (current.admissionRejectionJson)
+        throw new StoreError(409, "This operation was not admitted.");
+      const request = JSON.parse(current.requestJson) as OperationRequest;
+      const state = validateResponse(
+        response,
+        current.operationDigest,
+        current.kelvoOperationId,
+        request.kind,
+      );
+      const receipt = state.receipt;
+      if (!receipt) throw new StoreError(400, "The operation has no final receipt.");
+      if (current.receiptJson) {
+        if (!isDeepStrictEqual(JSON.parse(current.receiptJson), state))
+          throw new StoreError(409, "The confirmed operation receipt changed.");
+        return current;
+      }
+      const status =
+        receipt.outcome === "completed"
+          ? "succeeded"
+          : receipt.outcome === "cancelled_before_start"
+            ? "cancelled"
+            : receipt.outcome === "outcome_unknown"
+              ? "unknown"
+              : "failed";
+      if (
+        ["succeeded", "failed", "cancelled"].includes(current.status) &&
+        current.status !== status
+      )
+        throw new StoreError(409, "The operation already has a final outcome.");
+      const error =
+        status === "unknown"
+          ? "The database effect is unknown. Check the database before you run this operation again."
+          : status === "failed"
+            ? `The database operation failed (${receipt.error_code}).`
+            : null;
+      const now = this.clock();
+      const record = await tx.execution.update({
+        where: { operationId },
+        data: {
+          receiptJson: JSON.stringify(state),
+          status,
+          error,
+          affectedRows: receipt.affected_rows ?? null,
+          durationMs: Math.max(0, now.getTime() - current.createdAt.getTime()),
+          completedAt: now,
+        },
+      });
+      await audit(tx, owner.id, `query.${status}`, operationId, status);
+      return record;
+    });
+  }
+
+  async updateExecution(
+    owner: OwnerIdentity,
+    operationId: string,
+    input: { status: OperationStatus; error?: string; affectedRows?: number; durationMs?: number },
+  ): Promise<ExecutionRecord> {
+    const update = z
+      .object({
+        status: z.enum(["queued", "running", "succeeded", "failed", "cancelled", "unknown"]),
+        error: z.string().max(2048).optional(),
+        affectedRows: z.number().int().nonnegative().safe().optional(),
+        durationMs: z.number().int().nonnegative().safe().optional(),
+      })
+      .strict()
+      .parse(input);
+    return this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      const current = await tx.execution.findFirst({ where: { operationId, ownerId: owner.id } });
+      if (!current) throw new StoreError(404, "Operation not found.");
+      if (current.receiptJson) {
+        if (update.status !== current.status)
+          throw new StoreError(409, "The operation already has a confirmed receipt.");
+        return current;
+      }
+      if (update.status === "queued" || update.status === "running")
+        throw new StoreError(409, "Execution cannot return to a dispatchable state.");
+      if (
+        ["succeeded", "failed", "cancelled"].includes(current.status) &&
+        update.status !== current.status
+      )
+        throw new StoreError(409, "The operation already has a final outcome.");
+      const record = await tx.execution.update({
+        where: { operationId },
+        data: {
+          ...update,
+          error: update.error ?? null,
+          completedAt: terminalStatuses.has(update.status) ? this.clock() : null,
+        },
+      });
+      await audit(tx, owner.id, `query.${update.status}`, operationId, update.status);
+      return record;
+    });
+  }
+
+  async getAiSettings(owner: OwnerIdentity): Promise<AiSettingsSummary | null> {
+    await this.checkOwner(this.db, owner);
+    const row = await this.db.aiSettings.findFirst({ where: { id: "ai", deletedAt: null } });
+    return row
+      ? {
+          enabled: row.enabled,
+          endpoint: row.endpoint,
+          model: row.model,
+          hasSecret: row.credentials !== null,
+          revision: row.revision,
+        }
+      : null;
+  }
+
+  async saveAiSettings(owner: OwnerIdentity, input: AiSettingsInput): Promise<AiSettingsSummary> {
+    const body = z
+      .object({
+        enabled: z.boolean(),
+        endpoint: z.string().url().max(2048),
+        model: z.string().trim().min(1).max(256),
+        apiKey: z.string().max(8192).nullable().optional(),
+        revision: z.number().int().positive().optional(),
+      })
+      .strict()
+      .parse(input);
+    const endpoint = new URL(body.endpoint);
+    if (
+      !["https:", "http:"].includes(endpoint.protocol) ||
+      endpoint.username ||
+      endpoint.password ||
+      endpoint.search ||
+      endpoint.hash
+    ) {
+      throw new StoreError(
+        400,
+        "Use an HTTP or HTTPS endpoint without URL credentials, query parameters, or fragments.",
+      );
+    }
+    const instance = await this.getInstance();
+    return this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      const current = await tx.aiSettings.findUnique({ where: { id: "ai" } });
+      if (current && body.revision !== current.revision)
+        throw new StoreError(409, "AI settings changed. Refresh before saving.");
+      if (!current && body.revision !== undefined)
+        throw new StoreError(409, "AI settings do not exist yet.");
+      const credentials =
+        body.apiKey === undefined
+          ? (current?.credentials ?? null)
+          : body.apiKey === null || body.apiKey === ""
+            ? null
+            : encryptSecret(
+                { apiKey: body.apiKey },
+                { installationId: instance.installationId, recordId: "ai", purpose: "ai-provider" },
+                this.keys,
+              );
+      const row = await tx.aiSettings.upsert({
+        where: { id: "ai" },
+        create: {
+          id: "ai",
+          enabled: body.enabled,
+          endpoint: body.endpoint,
+          model: body.model,
+          credentials,
+        },
+        update: {
+          enabled: body.enabled,
+          endpoint: body.endpoint,
+          model: body.model,
+          credentials,
+          deletedAt: null,
+          revision: { increment: 1 },
+        },
+      });
+      await audit(tx, owner.id, "ai.settings.change", "ai");
+      return {
+        enabled: row.enabled,
+        endpoint: row.endpoint,
+        model: row.model,
+        hasSecret: row.credentials !== null,
+        revision: row.revision,
+      };
+    });
+  }
+
+  async decryptAiSettings(
+    owner: OwnerIdentity,
+  ): Promise<AiSettingsSummary & { apiKey: string | null }> {
+    return this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      const row = await tx.aiSettings.findFirst({
+        where: { id: "ai", deletedAt: null, enabled: true },
+      });
+      if (!row)
+        throw new StoreError(409, "AI is disabled or has no configured provider.", "AI_DISABLED");
+      const instance = await tx.instance.findUniqueOrThrow({ where: { id: 1 } });
+      const value = row.credentials
+        ? z
+            .object({ apiKey: z.string().min(1).max(8192) })
+            .strict()
+            .parse(
+              decryptSecret(
+                row.credentials,
+                { installationId: instance.installationId, recordId: "ai", purpose: "ai-provider" },
+                this.keys,
+              ),
+            )
+        : null;
+      return {
+        enabled: row.enabled,
+        endpoint: row.endpoint,
+        model: row.model,
+        hasSecret: row.credentials !== null,
+        revision: row.revision,
+        apiKey: value?.apiKey ?? null,
+      };
+    });
+  }
+
+  async listSavedQueries(owner: OwnerIdentity) {
+    await this.checkOwner(this.db, owner);
+    return this.db.savedQuery.findMany({
+      where: { ownerId: owner.id, deletedAt: null },
+      orderBy: { updatedAt: "desc" },
+      take: 200,
+    });
+  }
+
+  async saveQuery(
+    owner: OwnerIdentity,
+    input: { id?: string; connectionId: string; database: string; title: string; sql: string },
+  ) {
+    const body = z
+      .object({
+        id: idSchema.optional(),
+        connectionId: idSchema,
+        database: z.string().min(1).max(256),
+        title: z.string().trim().min(1).max(128),
+        sql: z.string().min(1).max(100_000),
+      })
+      .strict()
+      .parse(input);
+    return this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      const connection = await this.connection(tx, owner, body.connectionId);
+      if (connection.database !== body.database)
+        throw new StoreError(400, "The snippet database does not match its connection.");
+      const id = body.id ?? randomUUID();
+      if (
+        body.id &&
+        !(await tx.savedQuery.findFirst({ where: { id, ownerId: owner.id, deletedAt: null } }))
+      )
+        throw new StoreError(404, "SQL snippet not found.");
+      const { id: _id, ...fields } = body;
+      const row = await tx.savedQuery.upsert({
+        where: { id },
+        create: { id, ownerId: owner.id, ...fields },
+        update: fields,
+      });
+      await audit(tx, owner.id, "query.snippet.save", id);
+      return row;
+    });
+  }
+
+  async deleteSavedQuery(owner: OwnerIdentity, id: string): Promise<void> {
+    await this.transaction(async (tx) => {
+      await this.checkOwner(tx, owner);
+      const changed = await tx.savedQuery.updateMany({
+        where: { id, ownerId: owner.id, deletedAt: null },
+        data: { deletedAt: this.clock() },
+      });
+      if (changed.count !== 1) throw new StoreError(404, "SQL snippet not found.");
+      await audit(tx, owner.id, "query.snippet.delete", id);
+    });
+  }
+
+  async rotateSecrets(resume = false): Promise<{ connections: number; ai: number }> {
+    const instance = await this.getInstance();
+    if (!resume) {
+      const locked = await this.db.instance.updateMany({
+        where: { id: 1, maintenance: false },
+        data: { maintenance: true, maintenanceReason: "key-rotation" },
+      });
+      if (locked.count !== 1)
+        throw new StoreError(
+          409,
+          "Maintenance is already active. Use the explicit resume command after inspection.",
+        );
+      activateEncryptionKey(instance.installationId, this.keys);
+    } else if (!instance.maintenance || instance.maintenanceReason !== "key-rotation")
+      throw new StoreError(409, "There is no interrupted key rotation to resume.");
+    let connections = 0,
+      ai = 0;
+    for (const row of await this.db.connection.findMany({
+      where: { credentials: { not: null } },
+    })) {
+      const scope = {
+        installationId: instance.installationId,
+        recordId: row.id,
+        purpose: "connection",
+      };
+      const next = encryptSecret(
+        decryptSecret(row.credentials!, scope, this.keys),
+        scope,
+        this.keys,
+      );
+      const changed = await this.db.connection.updateMany({
+        where: { id: row.id, revision: row.revision, credentials: row.credentials },
+        data: { credentials: next },
+      });
+      if (changed.count !== 1)
+        throw new StoreError(
+          409,
+          "A connection changed during rotation. Maintenance remains active.",
+        );
+      connections += 1;
+    }
+    for (const row of await this.db.aiSettings.findMany({
+      where: { credentials: { not: null } },
+    })) {
+      const scope = {
+        installationId: instance.installationId,
+        recordId: row.id,
+        purpose: "ai-provider",
+      };
+      const next = encryptSecret(
+        decryptSecret(row.credentials!, scope, this.keys),
+        scope,
+        this.keys,
+      );
+      if (
+        (
+          await this.db.aiSettings.updateMany({
+            where: { id: row.id, revision: row.revision, credentials: row.credentials },
+            data: { credentials: next },
+          })
+        ).count !== 1
+      )
+        throw new StoreError(
+          409,
+          "AI settings changed during rotation. Maintenance remains active.",
+        );
+      ai += 1;
+    }
+    await this.transaction(async (tx) => {
+      await audit(tx, "local-operator", "secrets.rotate", instance.installationId);
+      await tx.instance.update({
+        where: { id: 1 },
+        data: { maintenance: false, maintenanceReason: null },
+      });
+    });
+    return { connections, ai };
+  }
+
+  /** Run after restoring metadata and Kelvo state, before allowing browser access. */
+  async invalidateRestoredAuthority(): Promise<void> {
+    const instance = await this.getInstance();
+    await this.transaction(async (tx) => {
+      await tx.instance.update({
+        where: { id: 1 },
+        data: {
+          maintenance: true,
+          maintenanceReason: "restore",
+          executionEpoch: randomUUID(),
+          setupTokenHash: null,
+          setupExpiresAt: null,
+        },
+      });
+      await tx.owner.updateMany({
+        where: { id: OWNER_ID },
+        data: { authVersion: { increment: 1 } },
+      });
+      await tx.ownerSession.updateMany({
+        where: { revokedAt: null },
+        data: { revokedAt: this.clock() },
+      });
+      await tx.queryApproval.updateMany({
+        where: { consumedAt: null },
+        data: { consumedAt: this.clock() },
+      });
+      await tx.execution.updateMany({
+        where: { status: { in: ["queued", "running"] } },
+        data: {
+          status: "unknown",
+          error:
+            "Restored operation. Check the database outcome. This operation will not be replayed.",
+          completedAt: this.clock(),
+        },
+      });
+      await audit(tx, "local-operator", "installation.restore.invalidate", instance.installationId);
+    });
+    replaceSessionSecret(this.keys);
+    await this.db.instance.update({
+      where: { id: 1 },
+      data: { maintenance: false, maintenanceReason: null },
+    });
+  }
+}

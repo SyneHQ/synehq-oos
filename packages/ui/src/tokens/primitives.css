@@ -1,0 +1,238 @@
+/**
+ * Probe — Tier 1: primitives.
+ *
+ * These are raw, unthemed values. They are declared exactly once, on `:root`,
+ * and are NEVER redefined by a theme. Tier 2 (themes.css) maps them to
+ * semantic roles; Tier 3 (components.css) maps semantics to components.
+ *
+ * Colour ramps are perceptually even OKLCH walks rendered to sRGB hex.
+ * Step `i` and step `12 - i` are light/dark mirrors of one another, which is
+ * what lets the dark theme be a reflection of the light theme rather than a
+ * second, independently tuned palette.
+ *
+ * Steps: 000 025 050 100 200 300 400 500 600 700 800 900 950
+ */
+
+:root {
+  /* ---------------------------------------------------------------------
+   * Neutral ramp — surfaces, text, borders.
+   * ------------------------------------------------------------------- */
+  --probe-neutral-000: #ffffff;
+  --probe-neutral-025: #f8f7ff;
+  --probe-neutral-050: #eeedf8;
+  --probe-neutral-100: #e1e1eb;
+  --probe-neutral-200: #cac9d3;
+  --probe-neutral-300: #b4b4be;
+  --probe-neutral-400: #93929c;
+  --probe-neutral-500: #73727b;
+  --probe-neutral-600: #54545c;
+  --probe-neutral-700: #35343c;
+  --probe-neutral-800: #1e1e25;
+  --probe-neutral-900: #111017;
+  --probe-neutral-950: #000000;
+
+  /* ---------------------------------------------------------------------
+   * Brand ramp — SyneHQ violet. Accents, links, selection, focus.
+   * ------------------------------------------------------------------- */
+  --probe-brand-000: #ffffff;
+  --probe-brand-025: #f9efff;
+  --probe-brand-050: #f0dfff;
+  --probe-brand-100: #e4ceff;
+  --probe-brand-200: #ceb4ff;
+  --probe-brand-300: #b99cff;
+  --probe-brand-400: #9878f9;
+  --probe-brand-500: #7957d2;
+  --probe-brand-600: #5b38a9;
+  --probe-brand-700: #3b187b;
+  --probe-brand-800: #240454;
+  --probe-brand-900: #140333;
+  --probe-brand-950: #000000;
+
+  /* ---------------------------------------------------------------------
+   * Success ramp.
+   * ------------------------------------------------------------------- */
+  --probe-success-000: #ffffff;
+  --probe-success-025: #d0ffea;
+  --probe-success-050: #b1ffda;
+  --probe-success-100: #94fbca;
+  --probe-success-200: #6ee6b0;
+  --probe-success-300: #4bd199;
+  --probe-success-400: #04ae77;
+  --probe-success-500: #008c59;
+  --probe-success-600: #006a3d;
+  --probe-success-700: #004621;
+  --probe-success-800: #002b0f;
+  --probe-success-900: #001907;
+  --probe-success-950: #000000;
+
+  /* ---------------------------------------------------------------------
+   * Critical ramp — destructive actions, errors.
+   * ------------------------------------------------------------------- */
+  --probe-critical-000: #ffffff;
+  --probe-critical-025: #ffe5df;
+  --probe-critical-050: #ffd1ca;
+  --probe-critical-100: #ffbdb6;
+  --probe-critical-200: #ffa099;
+  --probe-critical-300: #ff8781;
+  --probe-critical-400: #e76360;
+  --probe-critical-500: #c04242;
+  --probe-critical-600: #972227;
+  --probe-critical-700: #6b000d;
+  --probe-critical-800: #460001;
+  --probe-critical-900: #2b0001;
+  --probe-critical-950: #000000;
+
+  /* ---------------------------------------------------------------------
+   * Warning ramp.
+   * ------------------------------------------------------------------- */
+  --probe-warning-000: #ffffff;
+  --probe-warning-025: #fff2c8;
+  --probe-warning-050: #ffe5a7;
+  --probe-warning-100: #ffd689;
+  --probe-warning-200: #ffbc65;
+  --probe-warning-300: #eaa544;
+  --probe-warning-400: #c7830a;
+  --probe-warning-500: #a36300;
+  --probe-warning-600: #7f4500;
+  --probe-warning-700: #582600;
+  --probe-warning-800: #391200;
+  --probe-warning-900: #220900;
+  --probe-warning-950: #000000;
+
+  /* ---------------------------------------------------------------------
+   * Info ramp.
+   * ------------------------------------------------------------------- */
+  --probe-info-000: #ffffff;
+  --probe-info-025: #cfffff;
+  --probe-info-050: #b0f8ff;
+  --probe-info-100: #94ecff;
+  --probe-info-200: #70d5ff;
+  --probe-info-300: #50bfff;
+  --probe-info-400: #1d9ce6;
+  --probe-info-500: #007ac1;
+  --probe-info-600: #005a9a;
+  --probe-info-700: #00386e;
+  --probe-info-800: #00204a;
+  --probe-info-900: #00122d;
+  --probe-info-950: #000000;
+
+  /* ---------------------------------------------------------------------
+   * Tier 1b — space. A strict 4px grid.
+   * ------------------------------------------------------------------- */
+  --probe-space-0: 0px;
+  --probe-space-1: 4px;
+  --probe-space-2: 8px;
+  --probe-space-3: 12px;
+  --probe-space-4: 16px;
+  --probe-space-5: 20px;
+  --probe-space-6: 24px;
+  --probe-space-8: 32px;
+  --probe-space-10: 40px;
+  --probe-space-12: 48px;
+  --probe-space-16: 64px;
+
+  /* ---------------------------------------------------------------------
+   * Tier 1b — radius.
+   *
+   * Probe is SQUARE. `radius-none` is the default for every component.
+   * `radius-sm` is a deliberate escape hatch; `pill` is for counters and
+   * `circle` for avatars. Do not introduce other radii.
+   * ------------------------------------------------------------------- */
+  --probe-radius-none: 0px;
+  --probe-radius-sm: 2px;
+  --probe-radius-pill: 9999px;
+  --probe-radius-circle: 50%;
+
+  /* ---------------------------------------------------------------------
+   * Tier 1b — borders. Surfaces separate by 1px lines, never by shadows.
+   * ------------------------------------------------------------------- */
+  --probe-border-width: 1px;
+  --probe-border-width-strong: 2px;
+
+  /* ---------------------------------------------------------------------
+   * Tier 1b — typography.
+   *
+   * Bound to the fonts this app already loads: `--font-inter` (next/font,
+   * declared in src/app/layout.tsx) and `CommitMono` (@font-face in
+   * src/app/global.css). Both fall back to a system stack.
+   * ------------------------------------------------------------------- */
+  --probe-font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --probe-font-mono:
+    "CommitMono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --probe-font-display: var(--font-lexend), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* Type scale — size paired with a line-height of the same name. */
+  --probe-text-2xs: 11px;
+  --probe-text-xs: 12px;
+  --probe-text-sm: 13px;
+  --probe-text-base: 14px;
+  --probe-text-lg: 16px;
+  --probe-text-xl: 20px;
+  --probe-text-2xl: 24px;
+
+  --probe-leading-2xs: 16px;
+  --probe-leading-xs: 16px;
+  --probe-leading-sm: 18px;
+  --probe-leading-base: 20px;
+  --probe-leading-lg: 24px;
+  --probe-leading-xl: 28px;
+  --probe-leading-2xl: 32px;
+
+  /* One universal tracking rule, plus two documented exceptions. */
+  --probe-tracking-default: 0.01em;
+  --probe-tracking-wide: 0.06em; /* uppercase micro-labels */
+  --probe-tracking-tight: -0.01em; /* >= 20px display sizes */
+
+  --probe-weight-regular: 400;
+  --probe-weight-medium: 500;
+  --probe-weight-semibold: 600;
+
+  /* ---------------------------------------------------------------------
+   * Tier 1b — motion.
+   * ------------------------------------------------------------------- */
+  --probe-duration-fast: 120ms;
+  --probe-duration: 200ms;
+  --probe-ease: cubic-bezier(0, 0, 0.2, 1);
+
+  /* ---------------------------------------------------------------------
+   * Tier 1b — stacking order.
+   *
+   * Ascending, and the order is the contract: read top to bottom and you get
+   * paint order. Three rules decide where a layer sits.
+   *
+   * 1. A transient layer anchored to a trigger — dropdown, popover — outranks
+   *    a modal, so a Select inside a Dialog works. It cannot paint over a
+   *    modal it did not come from: opening a modal is an outside interaction,
+   *    which dismisses any open menu.
+   * 2. `dropdown` and `popover` are DELIBERATELY EQUAL, and it is not an
+   *    oversight — do not "fix" it by splitting them. This app nests them in
+   *    BOTH directions: a Select inside a PopoverContent (dashboards'
+   *    ChartVariableMappings) needs the menu on top, and a Popover opened from
+   *    a DropdownMenuItem that stays open (recent-chat's ShareDialog) needs
+   *    the popover on top. No single number satisfies both. Equal z-index
+   *    hands the decision to DOM order instead: Radix portals append to
+   *    <body> at mount, both layers' popper wrappers become stacking contexts
+   *    with the same z-index, and equal siblings paint in tree order — so the
+   *    later-mounted one wins. The later-mounted one is always the one opened
+   *    most recently, which is always the nested one, in either direction.
+   *    The real rule is "the most recently opened transient layer wins"; a
+   *    static number could only ever encode a guess about nesting direction.
+   * 3. A scrim sits one rung under the thing it dims, and nothing may be
+   *    allocated between them. `overlay`/`modal` are adjacent for that reason.
+   *
+   * 1000 is left unallocated as headroom for app chrome that must raise above
+   * base flow without entering this band. Raise chrome into it only if a real
+   * overlap demands it — an in-flow element needs no z-index at all.
+   * ------------------------------------------------------------------- */
+  --probe-z-base: 0;
+  --probe-z-sticky: 1100;
+  --probe-z-overlay: 1200;
+  --probe-z-modal: 1300;
+  --probe-z-popover: 1400;
+  --probe-z-dropdown: 1400; /* equal to popover on purpose — see rule 2 */
+  --probe-z-tooltip: 1500;
+  --probe-z-toast: 1600;
+}

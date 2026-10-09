@@ -1,0 +1,9 @@
+node_modules
+.next
+package-lock.json
+/data/
+/.data/
+*.sqlite*
+*.db*
+apps/web/public/monaco/
+._*

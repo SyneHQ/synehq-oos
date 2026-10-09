@@ -1,0 +1,96 @@
+@import "reactflow/dist/style.css";
+
+.sql-editor {
+  background: #fff;
+  overflow: hidden;
+  font-size: 13px;
+}
+.schema-diagram {
+  position: relative;
+  min-height: 400px;
+  height: 100%;
+  flex: 1;
+  background: #faf8fd;
+}
+.diagram-caption {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 5;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #e5dfed;
+  color: #776b83;
+  font-size: 11px;
+  max-width: calc(100% - 32px);
+}
+.diagram-empty {
+  padding: 64px;
+  text-align: center;
+  color: var(--probe-text-secondary);
+}
+.erd-table {
+  width: 280px;
+  background: #fff;
+  border: 1px solid #d9d0e3;
+  color: #42374e;
+  font-size: 12px;
+  box-shadow: 0 2px 8px #37204705;
+}
+.erd-table-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: #f3edf9;
+  padding: 12px;
+  border-bottom: 1px solid #e7dfef;
+}
+.erd-table-title strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+.erd-table-title span {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  color: #908499;
+}
+.erd-column {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+  border-bottom: 1px solid #f2eef6;
+  position: relative;
+}
+.erd-column > span:not(.erd-key-space) {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.erd-column small {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  color: #968a9f;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.erd-key-space {
+  width: 12px;
+}
+.erd-column svg {
+  color: #8b63b3;
+}
+.erd-external {
+  border-style: dashed;
+}
+.erd-external-label {
+  padding: 10px 12px;
+  color: #8f829b;
+  font-size: 11px;
+}

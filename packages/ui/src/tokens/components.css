@@ -1,0 +1,1921 @@
+/**
+ * Probe — Tier 3: component tokens.
+ *
+ * Naming: --probe-{component}[-{variant}]-{property}[--{state}]
+ * States: --hover --active --disabled --inverted --outlined --readonly
+ *         --invalid --focus --checked --completed --current --selected
+ *         --inactive, plus compounds: --outlined-hover, --inverted-hover,
+ *         --checked-hover, --invalid--hover, --selected-hover.
+ *
+ * THE LAYERING RULE: every value below resolves to a Tier 2 semantic token
+ * (colour) or a Tier 1b primitive (metrics, motion — Tier 2 is colour-only).
+ * No raw hex appears here, and no component CSS may skip this file to read a
+ * ramp step directly. That is the whole point of the system.
+ *
+ * Where a state needs a colour "one step further" than Tier 2 exposes (e.g.
+ * hover on a solid status button), we mix toward `--probe-surface-inverted`.
+ * Because light and dark are mirrors, that single expression darkens in light
+ * and lightens in dark — the correct direction in both, with one declaration.
+ *
+ * WHY THE SELECTOR IS NOT JUST `:root`: a custom property's `var()` is
+ * substituted where the property is DECLARED, not where it is used. Declared
+ * only at `:root`, `--probe-button-secondary-text: var(--probe-text-primary)`
+ * would freeze to the root element's Tier 2 — so a theme applied to a subtree
+ * (`<div data-probe-theme="dark">`, which themes.css and the README both
+ * support) would flip Tier 2 and leave every component painted in the root's
+ * theme. Re-declaring on each theme host makes Tier 3 resolve against the
+ * Tier 2 in force on that element. The list must stay in sync with the
+ * theme-host selectors in themes.css.
+ */
+
+:root,
+[data-probe-theme],
+.dark,
+.probe-light,
+.probe-dark,
+.probe-light-hc,
+.probe-dark-hc {
+  /* =====================================================================
+   * BUTTON — shared metrics
+   * =================================================================== */
+  --probe-button-height-sm: 32px;
+  --probe-button-height-md: 36px;
+  --probe-button-height-lg: 40px;
+  --probe-button-padding-x-sm: var(--probe-space-2);
+  --probe-button-padding-x-md: var(--probe-space-3);
+  --probe-button-padding-x-lg: var(--probe-space-4);
+  --probe-button-gap: var(--probe-space-2);
+  --probe-button-radius: var(--probe-radius-none);
+  --probe-button-border-width: var(--probe-border-width);
+  --probe-button-font-size: var(--probe-text-base);
+  --probe-button-line-height: var(--probe-leading-base);
+  --probe-button-font-weight: var(--probe-weight-medium);
+  --probe-button-tracking: var(--probe-tracking-default);
+  --probe-button-icon-size: 16px;
+  --probe-button-transition: var(--probe-duration) var(--probe-ease);
+  --probe-button-focus-ring: var(--probe-focus-ring);
+  --probe-button-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-button-focus-ring-offset: var(--probe-focus-ring-offset);
+  --probe-button-critical-focus-ring: var(--probe-focus-ring-critical);
+
+  /* BUTTON — primary: INVERTED against the page at rest (black-on-white in
+   * light, white-on-black in dark), turning brand on hover. `surface-inverted`
+   * and `surface-page` are mirrors of each other, so one pair of declarations
+   * is correct in both themes. Hover is the verified text-on-accent pairing
+   * (8.13:1 light, 5.75:1 dark) because `surface-page` === `text-on-accent`. */
+  --probe-button-primary-background: var(--probe-surface-inverted);
+  --probe-button-primary-background--hover: var(--probe-accent);
+  --probe-button-primary-background--active: var(--probe-accent-active);
+  --probe-button-primary-background--disabled: var(--probe-surface-sunken);
+  --probe-button-primary-text: var(--probe-surface-page);
+  --probe-button-primary-text--hover: var(--probe-text-on-accent);
+  --probe-button-primary-text--active: var(--probe-text-on-accent);
+  --probe-button-primary-text--disabled: var(--probe-text-disabled);
+  --probe-button-primary-border: var(--probe-surface-inverted);
+  --probe-button-primary-border--hover: var(--probe-accent);
+  --probe-button-primary-border--active: var(--probe-accent-active);
+  /* A disabled control still has to be VISIBLE — the user needs to see that
+   * the action exists before they can work out why it is unavailable.
+   * `border-primary` is the divider step: against `surface-page` it measures
+   * 1.3:1, so the button had no perceivable edge and read as empty page.
+   * `border-strong` is 2.85:1 — clearly present, and still well below the
+   * enabled control border (`border-control`, 4.75:1), so disabled never
+   * reads as louder than enabled. WCAG 1.4.11 exempts inactive components,
+   * which is why this is a usability fix and not a conformance one. */
+  --probe-button-primary-border--disabled: var(--probe-border-strong);
+
+  /* BUTTON — secondary: transparent, translucent border, fills on hover */
+  --probe-button-secondary-background: transparent;
+  --probe-button-secondary-background--hover: var(--probe-hover-overlay);
+  --probe-button-secondary-background--active: var(--probe-active-overlay);
+  --probe-button-secondary-background--disabled: transparent;
+  --probe-button-secondary-text: var(--probe-text-primary);
+  --probe-button-secondary-text--hover: var(--probe-text-strong);
+  --probe-button-secondary-text--active: var(--probe-text-strong);
+  --probe-button-secondary-text--disabled: var(--probe-text-disabled);
+  --probe-button-secondary-border: var(--probe-border-control);
+  --probe-button-secondary-border--hover: var(--probe-border-control-hover);
+  --probe-button-secondary-border--active: var(--probe-border-control-hover);
+  --probe-button-secondary-border--disabled: var(--probe-border-strong);
+  --probe-button-secondary-background--inverted: transparent;
+  --probe-button-secondary-background--inverted-hover: color-mix(
+    in srgb,
+    var(--probe-surface-page) 12%,
+    transparent
+  );
+  --probe-button-secondary-background--inverted-active: color-mix(
+    in srgb,
+    var(--probe-surface-page) 20%,
+    transparent
+  );
+  --probe-button-secondary-text--inverted: var(--probe-surface-page);
+  --probe-button-secondary-border--inverted: color-mix(
+    in srgb,
+    var(--probe-surface-page) 40%,
+    transparent
+  );
+  --probe-button-secondary-border--inverted-hover: var(--probe-surface-page);
+
+  /* BUTTON — ghost: no border, no fill until hover */
+  --probe-button-ghost-background: transparent;
+  --probe-button-ghost-background--hover: var(--probe-hover-overlay);
+  --probe-button-ghost-background--active: var(--probe-active-overlay);
+  --probe-button-ghost-background--disabled: transparent;
+  --probe-button-ghost-text: var(--probe-text-secondary);
+  --probe-button-ghost-text--hover: var(--probe-text-primary);
+  --probe-button-ghost-text--active: var(--probe-text-strong);
+  --probe-button-ghost-text--disabled: var(--probe-text-disabled);
+  --probe-button-ghost-border: transparent;
+  --probe-button-ghost-border--hover: transparent;
+  --probe-button-ghost-border--active: transparent;
+  --probe-button-ghost-border--disabled: transparent;
+  --probe-button-ghost-background--inverted: transparent;
+  --probe-button-ghost-background--inverted-hover: color-mix(
+    in srgb,
+    var(--probe-surface-page) 12%,
+    transparent
+  );
+  --probe-button-ghost-background--inverted-active: color-mix(
+    in srgb,
+    var(--probe-surface-page) 20%,
+    transparent
+  );
+  --probe-button-ghost-text--inverted: var(--probe-surface-page);
+
+  /* BUTTON — critical: solid destructive */
+  --probe-button-critical-background: var(--probe-critical-solid);
+  --probe-button-critical-background--hover: color-mix(
+    in srgb,
+    var(--probe-critical-solid) 88%,
+    var(--probe-surface-inverted)
+  );
+  --probe-button-critical-background--active: color-mix(
+    in srgb,
+    var(--probe-critical-solid) 78%,
+    var(--probe-surface-inverted)
+  );
+  --probe-button-critical-background--disabled: var(--probe-surface-sunken);
+  --probe-button-critical-text: var(--probe-critical-solid-fg);
+  --probe-button-critical-text--hover: var(--probe-critical-solid-fg);
+  --probe-button-critical-text--active: var(--probe-critical-solid-fg);
+  --probe-button-critical-text--disabled: var(--probe-text-disabled);
+  --probe-button-critical-border: var(--probe-critical-solid);
+  --probe-button-critical-border--hover: var(--probe-critical-solid);
+  --probe-button-critical-border--active: var(--probe-critical-solid);
+  --probe-button-critical-border--disabled: var(--probe-border-strong);
+
+  /* BUTTON — tertiary: filled, low emphasis */
+  --probe-button-tertiary-background: var(--probe-surface-sunken);
+  --probe-button-tertiary-background--hover: color-mix(
+    in srgb,
+    var(--probe-surface-sunken) 92%,
+    var(--probe-surface-inverted)
+  );
+  --probe-button-tertiary-background--active: color-mix(
+    in srgb,
+    var(--probe-surface-sunken) 86%,
+    var(--probe-surface-inverted)
+  );
+  --probe-button-tertiary-background--disabled: var(--probe-surface-sunken);
+  --probe-button-tertiary-text: var(--probe-text-primary);
+  --probe-button-tertiary-text--hover: var(--probe-text-strong);
+  --probe-button-tertiary-text--active: var(--probe-text-strong);
+  --probe-button-tertiary-text--disabled: var(--probe-text-disabled);
+  --probe-button-tertiary-border: transparent;
+  --probe-button-tertiary-border--hover: transparent;
+  --probe-button-tertiary-border--active: transparent;
+  --probe-button-tertiary-border--disabled: transparent;
+
+  /* =====================================================================
+   * ICON BUTTON — square hit targets, never below 32px
+   * =================================================================== */
+  --probe-icon-button-size-sm: 32px;
+  --probe-icon-button-size-md: 36px;
+  --probe-icon-button-size-lg: 40px;
+  --probe-icon-button-icon-size-sm: 14px;
+  --probe-icon-button-icon-size-md: 16px;
+  --probe-icon-button-icon-size-lg: 20px;
+  --probe-icon-button-radius: var(--probe-radius-none);
+  --probe-icon-button-border-width: var(--probe-border-width);
+  --probe-icon-button-background: transparent;
+  --probe-icon-button-background--hover: var(--probe-hover-overlay);
+  --probe-icon-button-background--active: var(--probe-active-overlay);
+  --probe-icon-button-background--selected: var(--probe-accent-subtle);
+  --probe-icon-button-background--disabled: transparent;
+  --probe-icon-button-text: var(--probe-text-secondary);
+  --probe-icon-button-text--hover: var(--probe-text-primary);
+  --probe-icon-button-text--active: var(--probe-text-strong);
+  --probe-icon-button-text--selected: var(--probe-accent);
+  --probe-icon-button-text--disabled: var(--probe-text-disabled);
+  --probe-icon-button-border: transparent;
+  --probe-icon-button-border--outlined: var(--probe-border-control);
+  --probe-icon-button-border--outlined-hover: var(--probe-border-control-hover);
+  --probe-icon-button-focus-ring: var(--probe-focus-ring);
+
+  /* =====================================================================
+   * BUTTON GROUP — segmented row of buttons sharing one 1px seam.
+   * `overlap` pulls each button onto its neighbour's border so the seam is
+   * 1px, not 2px; `z-raised` lifts the hovered/focused button so its own
+   * border (and focus ring) paints over the neighbour it overlaps.
+   * =================================================================== */
+  --probe-button-group-gap: var(--probe-space-0);
+  --probe-button-group-overlap: calc(-1 * var(--probe-border-width));
+  --probe-button-group-radius: var(--probe-radius-none);
+  --probe-button-group-z-raised: 1;
+
+  /* =====================================================================
+   * FIELD — the label / hint / error / required wrapper that every form
+   * control composes with. Controls never own this chrome themselves.
+   * =================================================================== */
+  --probe-field-gap: var(--probe-space-2);
+  --probe-field-inline-gap: var(--probe-space-2);
+  --probe-field-message-gap: var(--probe-space-1);
+  --probe-field-label-font-size: var(--probe-text-sm);
+  --probe-field-label-line-height: var(--probe-leading-sm);
+  --probe-field-label-font-weight: var(--probe-weight-medium);
+  --probe-field-label-tracking: var(--probe-tracking-default);
+  --probe-field-label-text: var(--probe-text-primary);
+  --probe-field-label-text--disabled: var(--probe-text-disabled);
+  --probe-field-required-text: var(--probe-critical-fg);
+  --probe-field-hint-font-size: var(--probe-text-sm);
+  --probe-field-hint-line-height: var(--probe-leading-sm);
+  --probe-field-hint-text: var(--probe-text-secondary);
+  --probe-field-error-font-size: var(--probe-text-sm);
+  --probe-field-error-line-height: var(--probe-leading-sm);
+  --probe-field-error-text: var(--probe-critical-fg);
+  --probe-field-error-gap: var(--probe-space-1);
+  --probe-field-error-icon-size: 14px;
+
+  /* =====================================================================
+   * INPUT
+   * =================================================================== */
+  --probe-input-height-sm: 32px;
+  --probe-input-height-md: 36px;
+  --probe-input-height-lg: 40px;
+  --probe-input-padding-x: var(--probe-space-3);
+  --probe-input-gap: var(--probe-space-2);
+  --probe-input-radius: var(--probe-radius-none);
+  --probe-input-border-width: var(--probe-border-width);
+  --probe-input-font-size: var(--probe-text-base);
+  --probe-input-line-height: var(--probe-leading-base);
+  --probe-input-tracking: var(--probe-tracking-default);
+  --probe-input-icon-size: 16px;
+  --probe-input-transition: var(--probe-duration) var(--probe-ease);
+  --probe-input-background: var(--probe-surface-raised);
+  --probe-input-background--hover: var(--probe-surface-raised);
+  --probe-input-background--disabled: var(--probe-surface-sunken);
+  --probe-input-background--readonly: var(--probe-surface-sunken);
+  --probe-input-text: var(--probe-text-primary);
+  --probe-input-text--disabled: var(--probe-text-disabled);
+  --probe-input-text--readonly: var(--probe-text-secondary);
+  --probe-input-placeholder: var(--probe-text-faint);
+  --probe-input-border: var(--probe-border-control);
+  --probe-input-border--hover: var(--probe-border-control-hover);
+  --probe-input-border--focus: var(--probe-border-focus);
+  --probe-input-border--invalid: var(--probe-critical-solid);
+  --probe-input-border--invalid--hover: var(--probe-critical-fg);
+  --probe-input-border--disabled: var(--probe-border-primary);
+  --probe-input-border--readonly: var(--probe-border-primary);
+  --probe-input-icon: var(--probe-text-faint);
+  --probe-input-icon--invalid: var(--probe-critical-solid);
+  --probe-input-focus-ring: var(--probe-focus-ring);
+  --probe-input-focus-ring--invalid: var(--probe-focus-ring-critical);
+  --probe-input-label-text: var(--probe-text-primary);
+  --probe-input-hint-text: var(--probe-text-secondary);
+  --probe-input-error-text: var(--probe-critical-fg);
+  --probe-input-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-input-focus-ring-offset: var(--probe-focus-ring-offset);
+  /* Prefix/suffix adornments. Distinct from --probe-input-icon because an
+   * adornment ("$", "USD") carries meaning, so it may not use text-faint. */
+  --probe-input-adornment-text: var(--probe-text-secondary);
+
+  /* =====================================================================
+   * TEXTAREA
+   * =================================================================== */
+  --probe-textarea-min-height: 80px;
+  --probe-textarea-padding-x: var(--probe-space-3);
+  --probe-textarea-padding-y: var(--probe-space-2);
+  --probe-textarea-radius: var(--probe-radius-none);
+  --probe-textarea-border-width: var(--probe-border-width);
+  --probe-textarea-font-size: var(--probe-text-base);
+  --probe-textarea-line-height: var(--probe-leading-base);
+  --probe-textarea-tracking: var(--probe-tracking-default);
+  --probe-textarea-transition: var(--probe-duration) var(--probe-ease);
+  --probe-textarea-background: var(--probe-surface-raised);
+  --probe-textarea-background--disabled: var(--probe-surface-sunken);
+  --probe-textarea-background--readonly: var(--probe-surface-sunken);
+  --probe-textarea-text: var(--probe-text-primary);
+  --probe-textarea-text--disabled: var(--probe-text-disabled);
+  --probe-textarea-text--readonly: var(--probe-text-secondary);
+  --probe-textarea-placeholder: var(--probe-text-faint);
+  --probe-textarea-border: var(--probe-border-control);
+  --probe-textarea-border--hover: var(--probe-border-control-hover);
+  --probe-textarea-border--focus: var(--probe-border-focus);
+  --probe-textarea-border--invalid: var(--probe-critical-solid);
+  --probe-textarea-border--invalid--hover: var(--probe-critical-fg);
+  --probe-textarea-border--disabled: var(--probe-border-primary);
+  --probe-textarea-border--readonly: var(--probe-border-primary);
+  --probe-textarea-focus-ring: var(--probe-focus-ring);
+  --probe-textarea-focus-ring--invalid: var(--probe-focus-ring-critical);
+  --probe-textarea-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-textarea-focus-ring-offset: var(--probe-focus-ring-offset);
+
+  /* =====================================================================
+   * SELECT (trigger; the list uses MENU tokens)
+   * =================================================================== */
+  --probe-select-height-sm: 32px;
+  --probe-select-height-md: 36px;
+  --probe-select-height-lg: 40px;
+  --probe-select-padding-x: var(--probe-space-3);
+  --probe-select-gap: var(--probe-space-2);
+  --probe-select-radius: var(--probe-radius-none);
+  --probe-select-border-width: var(--probe-border-width);
+  --probe-select-font-size: var(--probe-text-base);
+  --probe-select-line-height: var(--probe-leading-base);
+  --probe-select-tracking: var(--probe-tracking-default);
+  --probe-select-icon-size: 16px;
+  --probe-select-transition: var(--probe-duration) var(--probe-ease);
+  --probe-select-background: var(--probe-surface-raised);
+  --probe-select-background--hover: var(--probe-hover-overlay);
+  --probe-select-background--disabled: var(--probe-surface-sunken);
+  --probe-select-text: var(--probe-text-primary);
+  --probe-select-text--placeholder: var(--probe-text-faint);
+  --probe-select-text--disabled: var(--probe-text-disabled);
+  --probe-select-border: var(--probe-border-control);
+  --probe-select-border--hover: var(--probe-border-control-hover);
+  --probe-select-border--focus: var(--probe-border-focus);
+  --probe-select-border--invalid: var(--probe-critical-solid);
+  --probe-select-border--invalid--hover: var(--probe-critical-fg);
+  --probe-select-border--disabled: var(--probe-border-primary);
+  --probe-select-indicator: var(--probe-text-faint);
+  --probe-select-indicator--disabled: var(--probe-text-disabled);
+  --probe-select-focus-ring: var(--probe-focus-ring);
+  --probe-select-focus-ring--invalid: var(--probe-focus-ring-critical);
+  --probe-select-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-select-focus-ring-offset: var(--probe-focus-ring-offset);
+
+  /* =====================================================================
+   * CHECKBOX
+   * =================================================================== */
+  --probe-checkbox-size: 16px;
+  --probe-checkbox-hit-area: 32px;
+  --probe-checkbox-icon-size: 12px;
+  --probe-checkbox-transition: var(--probe-duration) var(--probe-ease);
+  --probe-checkbox-radius: var(--probe-radius-none);
+  --probe-checkbox-border-width: var(--probe-border-width);
+  --probe-checkbox-background: var(--probe-surface-raised);
+  --probe-checkbox-background--hover: var(--probe-hover-overlay);
+  --probe-checkbox-background--checked: var(--probe-accent);
+  --probe-checkbox-background--checked-hover: var(--probe-accent-hover);
+  --probe-checkbox-background--disabled: var(--probe-surface-sunken);
+  --probe-checkbox-background--checked-disabled: var(--probe-border-primary);
+  --probe-checkbox-border: var(--probe-border-control);
+  --probe-checkbox-border--hover: var(--probe-border-control-hover);
+  --probe-checkbox-border--checked: var(--probe-accent);
+  --probe-checkbox-border--checked-hover: var(--probe-accent-hover);
+  --probe-checkbox-border--invalid: var(--probe-critical-solid);
+  --probe-checkbox-border--disabled: var(--probe-border-primary);
+  --probe-checkbox-indicator: var(--probe-text-on-accent);
+  --probe-checkbox-indicator--disabled: var(--probe-text-disabled);
+  --probe-checkbox-label-text: var(--probe-text-primary);
+  --probe-checkbox-label-text--disabled: var(--probe-text-disabled);
+  --probe-checkbox-focus-ring: var(--probe-focus-ring);
+  --probe-checkbox-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-checkbox-focus-ring-offset: var(--probe-focus-ring-offset);
+
+  /* =====================================================================
+   * RADIO — circular by exception (a radio that is square reads as a checkbox)
+   * =================================================================== */
+  --probe-radio-size: 16px;
+  --probe-radio-hit-area: 32px;
+  --probe-radio-indicator-size: 6px;
+  --probe-radio-group-gap: var(--probe-space-2);
+  /* Laid out in a row, options need clear separation from the *next* circle,
+     not just from their own label. */
+  --probe-radio-group-gap--horizontal: var(--probe-space-4);
+  --probe-radio-transition: var(--probe-duration) var(--probe-ease);
+  --probe-radio-radius: var(--probe-radius-circle);
+  --probe-radio-border-width: var(--probe-border-width);
+  --probe-radio-background: var(--probe-surface-raised);
+  --probe-radio-background--hover: var(--probe-hover-overlay);
+  --probe-radio-background--checked: var(--probe-accent);
+  --probe-radio-background--checked-hover: var(--probe-accent-hover);
+  --probe-radio-background--disabled: var(--probe-surface-sunken);
+  --probe-radio-background--checked-disabled: var(--probe-border-primary);
+  --probe-radio-border: var(--probe-border-control);
+  --probe-radio-border--hover: var(--probe-border-control-hover);
+  --probe-radio-border--checked: var(--probe-accent);
+  --probe-radio-border--checked-hover: var(--probe-accent-hover);
+  --probe-radio-border--invalid: var(--probe-critical-solid);
+  --probe-radio-border--disabled: var(--probe-border-primary);
+  --probe-radio-indicator: var(--probe-text-on-accent);
+  --probe-radio-indicator--disabled: var(--probe-text-disabled);
+  --probe-radio-label-text: var(--probe-text-primary);
+  --probe-radio-label-text--disabled: var(--probe-text-disabled);
+  --probe-radio-focus-ring: var(--probe-focus-ring);
+  --probe-radio-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-radio-focus-ring-offset: var(--probe-focus-ring-offset);
+  --probe-radio-label-gap: var(--probe-space-2);
+  --probe-radio-label-font-size: var(--probe-text-base);
+  --probe-radio-label-line-height: var(--probe-leading-base);
+
+  /* =====================================================================
+   * SWITCH — pill by exception (the affordance IS the shape)
+   * =================================================================== */
+  --probe-switch-width: 32px;
+  --probe-switch-height: 18px;
+  --probe-switch-thumb-size: 14px;
+  --probe-switch-hit-area: 32px;
+  --probe-switch-radius: var(--probe-radius-pill);
+  --probe-switch-border-width: var(--probe-border-width);
+  --probe-switch-track-padding: 1px;
+  --probe-switch-transition: var(--probe-duration) var(--probe-ease);
+  /* How far the thumb slides: the track's inner width minus the thumb. */
+  --probe-switch-thumb-travel: calc(
+    var(--probe-switch-width) - var(--probe-switch-thumb-size) - 2 *
+      var(--probe-switch-track-padding) - 2 * var(--probe-switch-border-width)
+  );
+  /* The OFF track is a FILL, not a hint. WCAG 1.4.11 asks the OFF state to be
+   * identifiable, and the OFF state is carried by the THUMB'S POSITION — so the
+   * thumb has to be visible against its own track. `border-primary` made that
+   * pairing 1.30:1 in light (#ffffff thumb on #e1e1eb track) and 1.35:1 in
+   * dark: an off switch was a ghost. `border-control` lands the thumb at 4.75:1
+   * in light and 8.06:1 in dark, and the track at 4.75:1 / 9.20:1 against the
+   * page. It reads as a grey switch rather than a grey hint — that darkening is
+   * the fix, not a side effect of it. */
+  --probe-switch-track-background: var(--probe-border-control);
+  --probe-switch-track-background--hover: var(--probe-border-control-hover);
+  --probe-switch-track-background--checked: var(--probe-accent);
+  --probe-switch-track-background--checked-hover: var(--probe-accent-hover);
+  --probe-switch-track-background--disabled: var(--probe-surface-sunken);
+  --probe-switch-track-background--checked-disabled: var(--probe-border-primary);
+  /* Matches the OFF track fill exactly, the way `--checked` already matches
+   * `--checked`. Any lighter border token would be LIGHTER than the fill it
+   * surrounds, so the outermost pixel of the component's boundary — the one the
+   * eye and the SC actually measure against the page — would score worse than
+   * the fill just inside it. */
+  --probe-switch-track-border: var(--probe-border-control);
+  --probe-switch-track-border--checked: var(--probe-accent);
+  --probe-switch-track-border--disabled: var(--probe-border-primary);
+  --probe-switch-thumb-background: var(--probe-surface-raised);
+  --probe-switch-thumb-background--checked: var(--probe-text-on-accent);
+  --probe-switch-thumb-background--disabled: var(--probe-text-disabled);
+  --probe-switch-label-text: var(--probe-text-primary);
+  --probe-switch-label-text--disabled: var(--probe-text-disabled);
+  --probe-switch-focus-ring: var(--probe-focus-ring);
+  --probe-switch-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-switch-focus-ring-offset: var(--probe-focus-ring-offset);
+
+  /* =====================================================================
+   * BADGE — six tones. Unqualified = subtle; --solid and --outlined are
+   * states, exactly as Render models them.
+   * Always pair a badge's colour with an icon or text. Colour alone is
+   * never the signal.
+   * =================================================================== */
+  --probe-badge-height: 20px;
+  --probe-badge-padding-x: var(--probe-space-2);
+  --probe-badge-gap: var(--probe-space-1);
+  --probe-badge-radius: var(--probe-radius-none);
+  --probe-badge-border-width: var(--probe-border-width);
+  --probe-badge-font-size: var(--probe-text-xs);
+  --probe-badge-line-height: var(--probe-leading-xs);
+  --probe-badge-font-weight: var(--probe-weight-medium);
+  --probe-badge-tracking: var(--probe-tracking-default);
+  --probe-badge-icon-size: 12px;
+
+  /* BADGE — neutral */
+  --probe-badge-neutral-background: var(--probe-surface-sunken);
+  --probe-badge-neutral-background--hover: var(--probe-hover-overlay);
+  --probe-badge-neutral-background--solid: var(--probe-surface-inverted);
+  --probe-badge-neutral-background--solid-hover: var(--probe-text-primary);
+  --probe-badge-neutral-background--outlined: transparent;
+  --probe-badge-neutral-background--outlined-hover: var(--probe-hover-overlay);
+  --probe-badge-neutral-background--outlined-active: var(--probe-active-overlay);
+  --probe-badge-neutral-text: var(--probe-text-secondary);
+  --probe-badge-neutral-text--solid: var(--probe-surface-page);
+  --probe-badge-neutral-text--outlined: var(--probe-text-secondary);
+  --probe-badge-neutral-text--outlined-active: var(--probe-text-strong);
+  --probe-badge-neutral-border: var(--probe-border-primary);
+  --probe-badge-neutral-border--solid: var(--probe-surface-inverted);
+  --probe-badge-neutral-border--outlined: var(--probe-border-secondary);
+  --probe-badge-neutral-border--outlined-hover: var(--probe-border-strong);
+
+  /* BADGE — success */
+  --probe-badge-success-background: var(--probe-success-bg);
+  --probe-badge-success-background--hover: var(--probe-success-bg);
+  --probe-badge-success-background--solid: var(--probe-success-solid);
+  --probe-badge-success-background--solid-hover: color-mix(
+    in srgb,
+    var(--probe-success-solid) 88%,
+    var(--probe-surface-inverted)
+  );
+  --probe-badge-success-background--outlined: transparent;
+  --probe-badge-success-background--outlined-hover: var(--probe-success-bg);
+  --probe-badge-success-background--outlined-active: var(--probe-success-bg);
+  --probe-badge-success-text: var(--probe-success-fg);
+  --probe-badge-success-text--solid: var(--probe-success-solid-fg);
+  --probe-badge-success-text--outlined: var(--probe-success-fg);
+  --probe-badge-success-text--outlined-active: var(--probe-success-fg);
+  --probe-badge-success-border: var(--probe-success-border);
+  --probe-badge-success-border--solid: var(--probe-success-solid);
+  --probe-badge-success-border--outlined: var(--probe-success-border);
+  --probe-badge-success-border--outlined-hover: var(--probe-success-solid);
+
+  /* BADGE — critical */
+  --probe-badge-critical-background: var(--probe-critical-bg);
+  --probe-badge-critical-background--hover: var(--probe-critical-bg);
+  --probe-badge-critical-background--solid: var(--probe-critical-solid);
+  --probe-badge-critical-background--solid-hover: color-mix(
+    in srgb,
+    var(--probe-critical-solid) 88%,
+    var(--probe-surface-inverted)
+  );
+  --probe-badge-critical-background--outlined: transparent;
+  --probe-badge-critical-background--outlined-hover: var(--probe-critical-bg);
+  --probe-badge-critical-background--outlined-active: var(--probe-critical-bg);
+  --probe-badge-critical-text: var(--probe-critical-fg);
+  --probe-badge-critical-text--solid: var(--probe-critical-solid-fg);
+  --probe-badge-critical-text--outlined: var(--probe-critical-fg);
+  --probe-badge-critical-text--outlined-active: var(--probe-critical-fg);
+  --probe-badge-critical-border: var(--probe-critical-border);
+  --probe-badge-critical-border--solid: var(--probe-critical-solid);
+  --probe-badge-critical-border--outlined: var(--probe-critical-border);
+  --probe-badge-critical-border--outlined-hover: var(--probe-critical-solid);
+
+  /* BADGE — warning */
+  --probe-badge-warning-background: var(--probe-warning-bg);
+  --probe-badge-warning-background--hover: var(--probe-warning-bg);
+  --probe-badge-warning-background--solid: var(--probe-warning-solid);
+  --probe-badge-warning-background--solid-hover: color-mix(
+    in srgb,
+    var(--probe-warning-solid) 88%,
+    var(--probe-surface-inverted)
+  );
+  --probe-badge-warning-background--outlined: transparent;
+  --probe-badge-warning-background--outlined-hover: var(--probe-warning-bg);
+  --probe-badge-warning-background--outlined-active: var(--probe-warning-bg);
+  --probe-badge-warning-text: var(--probe-warning-fg);
+  --probe-badge-warning-text--solid: var(--probe-warning-solid-fg);
+  --probe-badge-warning-text--outlined: var(--probe-warning-fg);
+  --probe-badge-warning-text--outlined-active: var(--probe-warning-fg);
+  --probe-badge-warning-border: var(--probe-warning-border);
+  --probe-badge-warning-border--solid: var(--probe-warning-solid);
+  --probe-badge-warning-border--outlined: var(--probe-warning-border);
+  --probe-badge-warning-border--outlined-hover: var(--probe-warning-solid);
+
+  /* BADGE — info */
+  --probe-badge-info-background: var(--probe-info-bg);
+  --probe-badge-info-background--hover: var(--probe-info-bg);
+  --probe-badge-info-background--solid: var(--probe-info-solid);
+  --probe-badge-info-background--solid-hover: color-mix(
+    in srgb,
+    var(--probe-info-solid) 88%,
+    var(--probe-surface-inverted)
+  );
+  --probe-badge-info-background--outlined: transparent;
+  --probe-badge-info-background--outlined-hover: var(--probe-info-bg);
+  --probe-badge-info-background--outlined-active: var(--probe-info-bg);
+  --probe-badge-info-text: var(--probe-info-fg);
+  --probe-badge-info-text--solid: var(--probe-info-solid-fg);
+  --probe-badge-info-text--outlined: var(--probe-info-fg);
+  --probe-badge-info-text--outlined-active: var(--probe-info-fg);
+  --probe-badge-info-border: var(--probe-info-border);
+  --probe-badge-info-border--solid: var(--probe-info-solid);
+  --probe-badge-info-border--outlined: var(--probe-info-border);
+  --probe-badge-info-border--outlined-hover: var(--probe-info-solid);
+
+  /* BADGE — highlight (brand) */
+  --probe-badge-highlight-background: var(--probe-accent-subtle);
+  --probe-badge-highlight-background--hover: var(--probe-accent-muted);
+  --probe-badge-highlight-background--solid: var(--probe-accent);
+  --probe-badge-highlight-background--solid-hover: var(--probe-accent-hover);
+  --probe-badge-highlight-background--outlined: transparent;
+  --probe-badge-highlight-background--outlined-hover: var(--probe-accent-subtle);
+  --probe-badge-highlight-background--outlined-active: var(--probe-accent-subtle);
+  --probe-badge-highlight-text: var(--probe-accent);
+  --probe-badge-highlight-text--solid: var(--probe-text-on-accent);
+  --probe-badge-highlight-text--outlined: var(--probe-accent);
+  --probe-badge-highlight-text--outlined-active: var(--probe-accent-hover);
+  --probe-badge-highlight-border: var(--probe-accent-muted);
+  --probe-badge-highlight-border--solid: var(--probe-accent);
+  --probe-badge-highlight-border--outlined: var(--probe-accent-muted);
+  --probe-badge-highlight-border--outlined-hover: var(--probe-accent);
+
+  /* =====================================================================
+   * STATUS PILL — the one pill-shaped element besides switch/counters.
+   * Carries a dot AND a label; the dot is never the only signal.
+   * =================================================================== */
+  --probe-status-pill-height: 22px;
+  --probe-status-pill-padding-x: var(--probe-space-2);
+  --probe-status-pill-gap: var(--probe-space-2);
+  --probe-status-pill-radius: var(--probe-radius-pill);
+  --probe-status-pill-border-width: var(--probe-border-width);
+  --probe-status-pill-font-size: var(--probe-text-xs);
+  --probe-status-pill-font-weight: var(--probe-weight-medium);
+  --probe-status-pill-dot-size: 6px;
+  --probe-status-pill-background: var(--probe-surface-sunken);
+  --probe-status-pill-text: var(--probe-text-secondary);
+  --probe-status-pill-border: var(--probe-border-primary);
+  --probe-status-pill-dot: var(--probe-text-faint);
+  --probe-status-pill-dot--success: var(--probe-success-solid);
+  --probe-status-pill-dot--critical: var(--probe-critical-solid);
+  --probe-status-pill-dot--warning: var(--probe-warning-solid);
+  --probe-status-pill-dot--info: var(--probe-info-solid);
+  --probe-status-pill-text--success: var(--probe-success-fg);
+  --probe-status-pill-text--critical: var(--probe-critical-fg);
+  --probe-status-pill-text--warning: var(--probe-warning-fg);
+  --probe-status-pill-text--info: var(--probe-info-fg);
+  --probe-status-pill-background--success: var(--probe-success-bg);
+  --probe-status-pill-background--critical: var(--probe-critical-bg);
+  --probe-status-pill-background--warning: var(--probe-warning-bg);
+  --probe-status-pill-background--info: var(--probe-info-bg);
+  --probe-status-pill-border--success: var(--probe-success-border);
+  --probe-status-pill-border--critical: var(--probe-critical-border);
+  --probe-status-pill-border--warning: var(--probe-warning-border);
+  --probe-status-pill-border--info: var(--probe-info-border);
+
+  /* =====================================================================
+   * ALERT
+   * =================================================================== */
+  --probe-alert-padding: var(--probe-space-3);
+  --probe-alert-gap: var(--probe-space-3);
+  --probe-alert-radius: var(--probe-radius-none);
+  --probe-alert-border-width: var(--probe-border-width);
+  --probe-alert-title-font-size: var(--probe-text-base);
+  --probe-alert-title-font-weight: var(--probe-weight-medium);
+  --probe-alert-body-font-size: var(--probe-text-base);
+  --probe-alert-icon-size: 16px;
+  --probe-alert-background: var(--probe-surface-sunken);
+  --probe-alert-border: var(--probe-border-primary);
+  --probe-alert-title-text: var(--probe-text-strong);
+  --probe-alert-body-text: var(--probe-text-secondary);
+  --probe-alert-icon: var(--probe-text-secondary);
+  --probe-alert-background--success: var(--probe-success-bg);
+  --probe-alert-border--success: var(--probe-success-border);
+  --probe-alert-icon--success: var(--probe-success-fg);
+  --probe-alert-title-text--success: var(--probe-success-fg);
+  --probe-alert-background--critical: var(--probe-critical-bg);
+  --probe-alert-border--critical: var(--probe-critical-border);
+  --probe-alert-icon--critical: var(--probe-critical-fg);
+  --probe-alert-title-text--critical: var(--probe-critical-fg);
+  --probe-alert-background--warning: var(--probe-warning-bg);
+  --probe-alert-border--warning: var(--probe-warning-border);
+  --probe-alert-icon--warning: var(--probe-warning-fg);
+  --probe-alert-title-text--warning: var(--probe-warning-fg);
+  --probe-alert-background--info: var(--probe-info-bg);
+  --probe-alert-border--info: var(--probe-info-border);
+  --probe-alert-icon--info: var(--probe-info-fg);
+  --probe-alert-title-text--info: var(--probe-info-fg);
+
+  /* =====================================================================
+   * CARD
+   * =================================================================== */
+  --probe-card-padding: var(--probe-space-4);
+  --probe-card-gap: var(--probe-space-3);
+  --probe-card-radius: var(--probe-radius-none);
+  --probe-card-border-width: var(--probe-border-width);
+  --probe-card-background: var(--probe-surface-raised);
+  --probe-card-background--hover: var(--probe-hover-overlay);
+  --probe-card-background--selected: var(--probe-accent-subtle);
+  --probe-card-border: var(--probe-border-primary);
+  --probe-card-border--hover: var(--probe-border-secondary);
+  --probe-card-border--selected: var(--probe-accent);
+  --probe-card-title-text: var(--probe-text-strong);
+  --probe-card-body-text: var(--probe-text-secondary);
+  --probe-card-header-border: var(--probe-border-primary);
+  --probe-card-footer-background: var(--probe-surface-sunken);
+  --probe-card-focus-ring: var(--probe-focus-ring);
+  --probe-card-tracking: var(--probe-tracking-default);
+  --probe-card-header-gap: var(--probe-space-1);
+  --probe-card-title-font-size: var(--probe-text-lg);
+  --probe-card-title-line-height: var(--probe-leading-lg);
+  --probe-card-title-font-weight: var(--probe-weight-medium);
+  --probe-card-description-font-size: var(--probe-text-base);
+  --probe-card-description-line-height: var(--probe-leading-base);
+  --probe-card-footer-border: var(--probe-border-primary);
+  --probe-card-footer-gap: var(--probe-space-2);
+  --probe-card-background--active: var(--probe-active-overlay);
+  --probe-card-transition: var(--probe-duration) var(--probe-ease);
+  --probe-card-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-card-focus-ring-offset: var(--probe-focus-ring-offset);
+
+  /* =====================================================================
+   * PANEL — a card's full-bleed sibling: app chrome, not content
+   * =================================================================== */
+  --probe-panel-padding: var(--probe-space-4);
+  --probe-panel-header-height: 44px;
+  --probe-panel-radius: var(--probe-radius-none);
+  --probe-panel-border-width: var(--probe-border-width);
+  --probe-panel-background: var(--probe-surface-page);
+  --probe-panel-header-background: var(--probe-surface-sunken);
+  --probe-panel-border: var(--probe-border-primary);
+  --probe-panel-title-text: var(--probe-text-strong);
+  --probe-panel-title-font-size: var(--probe-text-base);
+  --probe-panel-title-font-weight: var(--probe-weight-medium);
+  --probe-panel-body-text: var(--probe-text-primary);
+  --probe-panel-tracking: var(--probe-tracking-default);
+  --probe-panel-header-padding-x: var(--probe-space-4);
+  --probe-panel-header-padding-y: var(--probe-space-2);
+  --probe-panel-header-gap: var(--probe-space-3);
+  --probe-panel-header-border: var(--probe-border-primary);
+  --probe-panel-title-line-height: var(--probe-leading-base);
+  --probe-panel-description-text: var(--probe-text-secondary);
+  --probe-panel-description-font-size: var(--probe-text-sm);
+  --probe-panel-actions-gap: var(--probe-space-2);
+
+  /* =====================================================================
+   * DIVIDER
+   * =================================================================== */
+  --probe-divider-color: var(--probe-border-primary);
+  --probe-divider-color--strong: var(--probe-border-secondary);
+  --probe-divider-thickness: var(--probe-border-width);
+  --probe-divider-spacing: var(--probe-space-4);
+  --probe-divider-label-text: var(--probe-text-faint);
+  --probe-divider-label-font-size: var(--probe-text-xs);
+  --probe-divider-label-tracking: var(--probe-tracking-wide);
+  --probe-divider-label-font-weight: var(--probe-weight-medium);
+  --probe-divider-label-gap: var(--probe-space-2);
+  --probe-divider-label-inset: var(--probe-space-3);
+
+  /* =====================================================================
+   * TABS
+   * =================================================================== */
+  --probe-tabs-height: 36px;
+  --probe-tabs-gap: var(--probe-space-4);
+  --probe-tabs-border-width: var(--probe-border-width);
+  --probe-tabs-item-padding-x: var(--probe-space-1);
+  --probe-tabs-font-size: var(--probe-text-base);
+  --probe-tabs-font-weight: var(--probe-weight-medium);
+  --probe-tabs-indicator-thickness: var(--probe-border-width-strong);
+  --probe-tabs-background: transparent;
+  --probe-tabs-text: var(--probe-text-secondary);
+  --probe-tabs-text--hover: var(--probe-text-primary);
+  --probe-tabs-text--active: var(--probe-text-strong);
+  --probe-tabs-text--disabled: var(--probe-text-disabled);
+  --probe-tabs-border: var(--probe-border-primary);
+  --probe-tabs-border--hover: var(--probe-border-secondary);
+  --probe-tabs-border--active: var(--probe-accent);
+  --probe-tabs-item-background--hover: transparent;
+  --probe-tabs-focus-ring: var(--probe-focus-ring);
+  --probe-tabs-line-height: var(--probe-leading-base);
+  --probe-tabs-tracking: var(--probe-tracking-default);
+  --probe-tabs-item-gap: var(--probe-space-2);
+  --probe-tabs-icon-size: 16px;
+  --probe-tabs-content-padding-top: var(--probe-space-4);
+  --probe-tabs-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-tabs-focus-ring-offset: var(--probe-focus-ring-offset);
+  --probe-tabs-transition:
+    color var(--probe-duration) var(--probe-ease),
+    border-color var(--probe-duration) var(--probe-ease);
+
+  /* =====================================================================
+   * BREADCRUMB
+   * =================================================================== */
+  --probe-breadcrumb-gap: var(--probe-space-2);
+  --probe-breadcrumb-font-size: var(--probe-text-sm);
+  --probe-breadcrumb-text: var(--probe-text-secondary);
+  --probe-breadcrumb-text--hover: var(--probe-text-primary);
+  --probe-breadcrumb-text--current: var(--probe-text-strong);
+  --probe-breadcrumb-separator: var(--probe-text-faint);
+  --probe-breadcrumb-focus-ring: var(--probe-focus-ring);
+  --probe-breadcrumb-line-height: var(--probe-leading-sm);
+  --probe-breadcrumb-tracking: var(--probe-tracking-default);
+  --probe-breadcrumb-item-height: 24px;
+  /* The overflow trigger is a control, not text, so it keeps the 32px floor. */
+  --probe-breadcrumb-overflow-size: 32px;
+  --probe-breadcrumb-item-gap: var(--probe-space-1);
+  --probe-breadcrumb-icon-size: 14px;
+  --probe-breadcrumb-separator-size: 14px;
+  --probe-breadcrumb-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-breadcrumb-focus-ring-offset: var(--probe-focus-ring-offset);
+  --probe-breadcrumb-transition: color var(--probe-duration) var(--probe-ease);
+
+  /* =====================================================================
+   * SIDE NAV
+   * =================================================================== */
+  --probe-side-nav-width: 240px;
+  --probe-side-nav-padding: var(--probe-space-2);
+  --probe-side-nav-item-height: 32px;
+  --probe-side-nav-item-padding-x: var(--probe-space-2);
+  --probe-side-nav-item-gap: var(--probe-space-2);
+  --probe-side-nav-item-radius: var(--probe-radius-none);
+  --probe-side-nav-font-size: var(--probe-text-base);
+  --probe-side-nav-background: var(--probe-surface-sunken);
+  --probe-side-nav-border: var(--probe-border-primary);
+  --probe-side-nav-item-background: transparent;
+  --probe-side-nav-item-background--hover: var(--probe-hover-overlay);
+  --probe-side-nav-item-background--active: var(--probe-active-overlay);
+  --probe-side-nav-item-background--selected: var(--probe-accent-subtle);
+  --probe-side-nav-item-background--selected-hover: var(--probe-accent-muted);
+  --probe-side-nav-item-text: var(--probe-text-secondary);
+  --probe-side-nav-item-text--hover: var(--probe-text-primary);
+  --probe-side-nav-item-text--selected: var(--probe-accent);
+  --probe-side-nav-item-text--disabled: var(--probe-text-disabled);
+  --probe-side-nav-item-icon: var(--probe-text-faint);
+  --probe-side-nav-item-icon--selected: var(--probe-accent);
+  --probe-side-nav-item-indicator--selected: var(--probe-accent);
+  /* Section labels: tiny, uppercase, wide tracking. */
+  --probe-side-nav-section-text: var(--probe-text-faint);
+  --probe-side-nav-section-font-size: var(--probe-text-2xs);
+  --probe-side-nav-section-font-weight: var(--probe-weight-medium);
+  --probe-side-nav-section-tracking: var(--probe-tracking-wide);
+  --probe-side-nav-focus-ring: var(--probe-focus-ring);
+  --probe-side-nav-border-width: var(--probe-border-width);
+  --probe-side-nav-line-height: var(--probe-leading-base);
+  --probe-side-nav-tracking: var(--probe-tracking-default);
+  --probe-side-nav-item-icon-size: 16px;
+  --probe-side-nav-item-font-weight: var(--probe-weight-regular);
+  --probe-side-nav-item-font-weight--selected: var(--probe-weight-medium);
+  --probe-side-nav-item-gap-y: var(--probe-space-1);
+  --probe-side-nav-indicator-thickness: var(--probe-border-width-strong);
+  --probe-side-nav-nested-indent: var(--probe-space-6);
+  --probe-side-nav-chevron-transition: transform var(--probe-duration) var(--probe-ease);
+  --probe-side-nav-section-line-height: var(--probe-leading-2xs);
+  --probe-side-nav-section-padding-x: var(--probe-space-2);
+  --probe-side-nav-section-padding-y: var(--probe-space-2);
+  --probe-side-nav-section-gap: var(--probe-space-4);
+  --probe-side-nav-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-side-nav-focus-ring-offset: calc(var(--probe-focus-ring-offset) * -1);
+  --probe-side-nav-transition:
+    color var(--probe-duration) var(--probe-ease),
+    background-color var(--probe-duration) var(--probe-ease);
+
+  /* =====================================================================
+   * SECTION NAV — the right-rail index for one long page. Plain text on the
+   * page background: no box, no fill, no indent. The active item brightens
+   * its text and thickens the one shared rule beside it, and that is the
+   * whole vocabulary — see render-teardown.md §3.15.
+   * =================================================================== */
+  --probe-section-nav-gap: var(--probe-space-1);
+  --probe-section-nav-item-padding-x: var(--probe-space-3);
+  --probe-section-nav-item-padding-y: var(--probe-space-1);
+  --probe-section-nav-font-size: var(--probe-text-sm);
+  --probe-section-nav-line-height: var(--probe-leading-sm);
+  --probe-section-nav-tracking: var(--probe-tracking-default);
+  --probe-section-nav-font-weight: var(--probe-weight-regular);
+  /* "Brightening the text" is the entire active treatment: the weight is the
+   * same on every row, so nothing reflows when the active item changes. */
+  --probe-section-nav-text: var(--probe-text-secondary);
+  --probe-section-nav-text--hover: var(--probe-text-primary);
+  --probe-section-nav-text--active: var(--probe-text-strong);
+  /* The rule is neutral, not accent: an index is a shortcut, not a selection. */
+  --probe-section-nav-rule: var(--probe-border-primary);
+  --probe-section-nav-rule--active: var(--probe-border-strong);
+  --probe-section-nav-rule-width: var(--probe-border-width);
+  --probe-section-nav-rule-width--active: var(--probe-border-width-strong);
+  /* The index does not scroll away with the section it points at. */
+  --probe-section-nav-sticky-top: var(--probe-space-6);
+  --probe-section-nav-focus-ring: var(--probe-focus-ring);
+  --probe-section-nav-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-section-nav-focus-ring-offset: calc(var(--probe-focus-ring-offset) * -1);
+  --probe-section-nav-transition:
+    color var(--probe-duration) var(--probe-ease),
+    background-color var(--probe-duration) var(--probe-ease);
+
+  /* =====================================================================
+   * STEPPER
+   * =================================================================== */
+  --probe-stepper-indicator-size: 24px;
+  --probe-stepper-gap: var(--probe-space-3);
+  --probe-stepper-connector-thickness: var(--probe-border-width);
+  --probe-stepper-font-size: var(--probe-text-base);
+  --probe-stepper-indicator-background: var(--probe-surface-raised);
+  --probe-stepper-indicator-background--current: var(--probe-accent);
+  --probe-stepper-indicator-background--completed: var(--probe-accent);
+  --probe-stepper-indicator-background--inactive: var(--probe-surface-sunken);
+  --probe-stepper-indicator-border: var(--probe-border-secondary);
+  --probe-stepper-indicator-border--current: var(--probe-accent);
+  --probe-stepper-indicator-border--completed: var(--probe-accent);
+  --probe-stepper-indicator-border--inactive: var(--probe-border-primary);
+  --probe-stepper-indicator-text: var(--probe-text-secondary);
+  --probe-stepper-indicator-text--current: var(--probe-text-on-accent);
+  --probe-stepper-indicator-text--completed: var(--probe-text-on-accent);
+  --probe-stepper-indicator-text--inactive: var(--probe-text-disabled);
+  --probe-stepper-label-text: var(--probe-text-secondary);
+  --probe-stepper-label-text--current: var(--probe-text-strong);
+  --probe-stepper-label-text--completed: var(--probe-text-primary);
+  --probe-stepper-label-text--inactive: var(--probe-text-disabled);
+  --probe-stepper-connector: var(--probe-border-primary);
+  --probe-stepper-connector--completed: var(--probe-accent);
+  --probe-stepper-connector-length: var(--probe-space-6);
+  --probe-stepper-line-height: var(--probe-leading-base);
+  --probe-stepper-tracking: var(--probe-tracking-default);
+  --probe-stepper-step-gap: var(--probe-space-4);
+  --probe-stepper-indicator-radius: var(--probe-radius-none);
+  --probe-stepper-indicator-border-width: var(--probe-border-width);
+  --probe-stepper-indicator-font-size: var(--probe-text-xs);
+  --probe-stepper-indicator-font-weight: var(--probe-weight-medium);
+  --probe-stepper-indicator-icon-size: 14px;
+  --probe-stepper-label-font-weight: var(--probe-weight-medium);
+  --probe-stepper-label-gap: var(--probe-space-1);
+  --probe-stepper-description-text: var(--probe-text-faint);
+  --probe-stepper-description-font-size: var(--probe-text-xs);
+  --probe-stepper-description-line-height: var(--probe-leading-xs);
+  --probe-stepper-transition:
+    color var(--probe-duration) var(--probe-ease),
+    background-color var(--probe-duration) var(--probe-ease),
+    border-color var(--probe-duration) var(--probe-ease);
+
+  /* =====================================================================
+   * PAGINATION
+   * =================================================================== */
+  --probe-pagination-item-size: 32px;
+  --probe-pagination-gap: var(--probe-space-1);
+  --probe-pagination-font-size: var(--probe-text-base);
+  --probe-pagination-radius: var(--probe-radius-none);
+  --probe-pagination-border-width: var(--probe-border-width);
+  --probe-pagination-item-background: transparent;
+  --probe-pagination-item-background--hover: var(--probe-hover-overlay);
+  --probe-pagination-item-background--active: var(--probe-active-overlay);
+  --probe-pagination-item-background--selected: var(--probe-accent);
+  --probe-pagination-item-background--disabled: transparent;
+  --probe-pagination-item-text: var(--probe-text-secondary);
+  --probe-pagination-item-text--hover: var(--probe-text-primary);
+  --probe-pagination-item-text--selected: var(--probe-text-on-accent);
+  --probe-pagination-item-text--disabled: var(--probe-text-disabled);
+  --probe-pagination-item-border: transparent;
+  --probe-pagination-item-border--hover: var(--probe-border-secondary);
+  --probe-pagination-item-border--selected: var(--probe-accent);
+  --probe-pagination-summary-text: var(--probe-text-faint);
+  --probe-pagination-focus-ring: var(--probe-focus-ring);
+  --probe-pagination-line-height: var(--probe-leading-base);
+  --probe-pagination-tracking: var(--probe-tracking-default);
+  --probe-pagination-item-padding-x: var(--probe-space-2);
+  --probe-pagination-item-font-weight: var(--probe-weight-regular);
+  --probe-pagination-item-font-weight--selected: var(--probe-weight-medium);
+  --probe-pagination-icon-size: 16px;
+  --probe-pagination-ellipsis-text: var(--probe-text-faint);
+  --probe-pagination-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-pagination-focus-ring-offset: var(--probe-focus-ring-offset);
+  --probe-pagination-transition:
+    color var(--probe-duration) var(--probe-ease),
+    background-color var(--probe-duration) var(--probe-ease),
+    border-color var(--probe-duration) var(--probe-ease);
+
+  /* =====================================================================
+   * TOOLTIP — deliberately inverts against the page
+   * =================================================================== */
+  --probe-tooltip-padding-x: var(--probe-space-2);
+  --probe-tooltip-padding-y: var(--probe-space-1);
+  --probe-tooltip-max-width: 280px;
+  --probe-tooltip-radius: var(--probe-radius-none);
+  --probe-tooltip-font-size: var(--probe-text-xs);
+  --probe-tooltip-line-height: var(--probe-leading-xs);
+  --probe-tooltip-background: var(--probe-surface-inverted);
+  --probe-tooltip-text: var(--probe-surface-page);
+  --probe-tooltip-border: var(--probe-surface-inverted);
+  --probe-tooltip-arrow: var(--probe-surface-inverted);
+  --probe-tooltip-z-index: var(--probe-z-tooltip);
+
+  /* =====================================================================
+   * MENU (dropdown, context menu, select list)
+   * =================================================================== */
+  --probe-menu-min-width: 180px;
+  --probe-menu-padding: var(--probe-space-1);
+  --probe-menu-radius: var(--probe-radius-none);
+  --probe-menu-border-width: var(--probe-border-width);
+  --probe-menu-background: var(--probe-surface-overlay);
+  --probe-menu-border: var(--probe-border-secondary);
+  --probe-menu-z-index: var(--probe-z-dropdown);
+  --probe-menu-item-height: 32px;
+  --probe-menu-item-padding-x: var(--probe-space-2);
+  --probe-menu-item-gap: var(--probe-space-2);
+  --probe-menu-item-font-size: var(--probe-text-base);
+  --probe-menu-item-background: transparent;
+  --probe-menu-item-background--hover: var(--probe-hover-overlay);
+  --probe-menu-item-background--active: var(--probe-active-overlay);
+  --probe-menu-item-background--selected: var(--probe-accent-subtle);
+  --probe-menu-item-background--disabled: transparent;
+  --probe-menu-item-background--critical-hover: var(--probe-critical-bg);
+  --probe-menu-item-text: var(--probe-text-primary);
+  --probe-menu-item-text--hover: var(--probe-text-strong);
+  --probe-menu-item-text--selected: var(--probe-accent);
+  --probe-menu-item-text--disabled: var(--probe-text-disabled);
+  --probe-menu-item-text--critical: var(--probe-critical-fg);
+  --probe-menu-item-icon: var(--probe-text-faint);
+  --probe-menu-item-shortcut-text: var(--probe-text-faint);
+  --probe-menu-separator: var(--probe-border-primary);
+  --probe-menu-label-text: var(--probe-text-faint);
+  --probe-menu-label-font-size: var(--probe-text-2xs);
+  --probe-menu-label-tracking: var(--probe-tracking-wide);
+
+  /* =====================================================================
+   * DIALOG
+   * =================================================================== */
+  --probe-dialog-width: 480px;
+  --probe-dialog-padding: var(--probe-space-5);
+  --probe-dialog-gap: var(--probe-space-4);
+  --probe-dialog-radius: var(--probe-radius-none);
+  --probe-dialog-border-width: var(--probe-border-width);
+  --probe-dialog-background: var(--probe-surface-overlay);
+  --probe-dialog-border: var(--probe-border-secondary);
+  --probe-dialog-scrim: var(--probe-overlay-scrim);
+  --probe-dialog-title-text: var(--probe-text-strong);
+  --probe-dialog-title-font-size: var(--probe-text-lg);
+  --probe-dialog-title-font-weight: var(--probe-weight-medium);
+  --probe-dialog-description-text: var(--probe-text-secondary);
+  --probe-dialog-footer-border: var(--probe-border-primary);
+  --probe-dialog-z-index: var(--probe-z-modal);
+  --probe-dialog-scrim-z-index: var(--probe-z-overlay);
+
+  /* =====================================================================
+   * POPOVER
+   * =================================================================== */
+  --probe-popover-padding: var(--probe-space-3);
+  --probe-popover-max-width: 320px;
+  --probe-popover-radius: var(--probe-radius-none);
+  --probe-popover-border-width: var(--probe-border-width);
+  --probe-popover-background: var(--probe-surface-overlay);
+  --probe-popover-border: var(--probe-border-secondary);
+  --probe-popover-text: var(--probe-text-primary);
+  --probe-popover-title-text: var(--probe-text-strong);
+  --probe-popover-arrow: var(--probe-surface-overlay);
+  --probe-popover-arrow-border: var(--probe-border-secondary);
+  --probe-popover-z-index: var(--probe-z-popover);
+
+  /* =====================================================================
+   * TABLE
+   * =================================================================== */
+  --probe-table-font-size: var(--probe-text-base);
+  --probe-table-row-height: 36px;
+  --probe-table-cell-padding-x: var(--probe-space-3);
+  --probe-table-cell-padding-y: var(--probe-space-2);
+  --probe-table-border-width: var(--probe-border-width);
+  --probe-table-background: var(--probe-surface-page);
+  --probe-table-border: var(--probe-border-primary);
+  --probe-table-header-background: var(--probe-surface-sunken);
+  --probe-table-header-text: var(--probe-text-secondary);
+  --probe-table-header-font-size: var(--probe-text-xs);
+  --probe-table-header-font-weight: var(--probe-weight-medium);
+  --probe-table-header-tracking: var(--probe-tracking-wide);
+  --probe-table-header-border: var(--probe-border-secondary);
+  --probe-table-header-background--hover: var(--probe-hover-overlay);
+  --probe-table-sort-icon: var(--probe-text-faint);
+  --probe-table-sort-icon--active: var(--probe-accent);
+  --probe-table-row-background: transparent;
+  --probe-table-row-background--hover: var(--probe-hover-overlay);
+  --probe-table-row-background--selected: var(--probe-accent-subtle);
+  --probe-table-row-background--selected-hover: var(--probe-accent-muted);
+  --probe-table-row-border: var(--probe-border-primary);
+  --probe-table-cell-text: var(--probe-text-primary);
+  --probe-table-cell-text--faint: var(--probe-text-secondary);
+  --probe-table-cell-border: var(--probe-border-primary);
+  --probe-table-footer-background: var(--probe-surface-sunken);
+
+  /* =====================================================================
+   * DATA LIST — key/value pairs
+   * =================================================================== */
+  --probe-data-list-row-gap: var(--probe-space-2);
+  --probe-data-list-column-gap: var(--probe-space-4);
+  --probe-data-list-padding-y: var(--probe-space-2);
+  --probe-data-list-font-size: var(--probe-text-base);
+  --probe-data-list-term-text: var(--probe-text-secondary);
+  --probe-data-list-term-width: 160px;
+  --probe-data-list-description-text: var(--probe-text-primary);
+  --probe-data-list-border: var(--probe-border-primary);
+  --probe-data-list-background--hover: var(--probe-hover-overlay);
+
+  /* =====================================================================
+   * TREE VIEW
+   * =================================================================== */
+  --probe-tree-view-item-height: 28px;
+  --probe-tree-view-indent: var(--probe-space-4);
+  --probe-tree-view-item-padding-x: var(--probe-space-2);
+  --probe-tree-view-item-gap: var(--probe-space-2);
+  --probe-tree-view-font-size: var(--probe-text-base);
+  --probe-tree-view-item-background: transparent;
+  --probe-tree-view-item-background--hover: var(--probe-hover-overlay);
+  --probe-tree-view-item-background--active: var(--probe-active-overlay);
+  --probe-tree-view-item-background--selected: var(--probe-accent-subtle);
+  --probe-tree-view-item-background--selected-hover: var(--probe-accent-muted);
+  --probe-tree-view-item-text: var(--probe-text-primary);
+  --probe-tree-view-item-text--hover: var(--probe-text-strong);
+  --probe-tree-view-item-text--selected: var(--probe-accent);
+  --probe-tree-view-item-text--disabled: var(--probe-text-disabled);
+  --probe-tree-view-item-icon: var(--probe-text-faint);
+  --probe-tree-view-item-icon--selected: var(--probe-accent);
+  --probe-tree-view-guide: var(--probe-border-primary);
+  --probe-tree-view-focus-ring: var(--probe-focus-ring);
+
+  /* =====================================================================
+   * CODE BLOCK
+   * =================================================================== */
+  --probe-code-block-padding: var(--probe-space-3);
+  --probe-code-block-radius: var(--probe-radius-none);
+  --probe-code-block-border-width: var(--probe-border-width);
+  --probe-code-block-font-family: var(--probe-font-mono);
+  --probe-code-block-font-size: var(--probe-text-sm);
+  --probe-code-block-line-height: var(--probe-leading-sm);
+  --probe-code-block-tracking: 0;
+  --probe-code-block-background: var(--probe-surface-sunken);
+  --probe-code-block-border: var(--probe-border-primary);
+  --probe-code-block-text: var(--probe-text-primary);
+  --probe-code-block-gutter-text: var(--probe-text-faint);
+  --probe-code-block-gutter-border: var(--probe-border-primary);
+  --probe-code-block-line-background--highlighted: var(--probe-accent-subtle);
+  --probe-code-block-selection: var(--probe-accent-muted);
+  --probe-code-block-header-background: var(--probe-surface-sunken);
+  --probe-code-block-header-text: var(--probe-text-faint);
+  --probe-code-block-header-height: 32px;
+  --probe-code-block-header-padding-x: var(--probe-space-3);
+  --probe-code-block-header-gap: var(--probe-space-2);
+  --probe-code-block-copy-padding-x: var(--probe-space-1);
+  --probe-code-block-copy-gap: var(--probe-space-1);
+  --probe-code-block-header-border: var(--probe-border-primary);
+  --probe-code-block-header-font-size: var(--probe-text-xs);
+  --probe-code-block-header-font-family: var(--probe-font-mono);
+  --probe-code-block-gutter-width: 40px;
+  --probe-code-block-gutter-padding-x: var(--probe-space-2);
+  --probe-code-block-line-marker-width: var(--probe-border-width-strong);
+  --probe-code-block-line-border--highlighted: var(--probe-accent);
+  --probe-code-block-line-background--error: var(--probe-critical-bg);
+  --probe-code-block-line-border--error: var(--probe-critical-solid);
+  --probe-code-block-gutter-text--error: var(--probe-critical-fg);
+  --probe-code-block-copy-size: 32px;
+  --probe-code-block-copy-icon-size: 14px;
+  --probe-code-block-copy-radius: var(--probe-radius-none);
+  --probe-code-block-copy-text: var(--probe-text-secondary);
+  --probe-code-block-copy-text--hover: var(--probe-text-primary);
+  --probe-code-block-copy-text--copied: var(--probe-success-fg);
+  --probe-code-block-copy-text--error: var(--probe-critical-fg);
+  --probe-code-block-copy-background: transparent;
+  --probe-code-block-copy-background--hover: var(--probe-hover-overlay);
+  --probe-code-block-copy-background--active: var(--probe-active-overlay);
+  --probe-code-block-copy-focus-ring: var(--probe-focus-ring);
+  --probe-code-block-copy-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-code-block-copy-focus-ring-offset: var(--probe-focus-ring-offset);
+  --probe-code-block-transition: var(--probe-duration) var(--probe-ease);
+
+  /* Syntax tokens — Prism's `.token.<type>` class names. Every value clears
+   * AA against `--probe-code-block-background`; comments and punctuation use
+   * text-secondary rather than text-faint because in code they carry meaning. */
+  --probe-code-block-token-keyword: var(--probe-accent);
+  --probe-code-block-token-string: var(--probe-success-fg);
+  --probe-code-block-token-number: var(--probe-warning-fg);
+  --probe-code-block-token-comment: var(--probe-text-secondary);
+  --probe-code-block-token-function: var(--probe-info-fg);
+  --probe-code-block-token-operator: var(--probe-text-secondary);
+  --probe-code-block-token-punctuation: var(--probe-text-secondary);
+  --probe-code-block-token-variable: var(--probe-text-primary);
+
+  /* =====================================================================
+   * PROGRESS
+   * =================================================================== */
+  --probe-progress-height: 4px;
+  --probe-progress-height-lg: 8px;
+  --probe-progress-radius: var(--probe-radius-none);
+  --probe-progress-track: var(--probe-border-primary);
+  --probe-progress-indicator: var(--probe-accent);
+  --probe-progress-indicator--success: var(--probe-success-solid);
+  --probe-progress-indicator--critical: var(--probe-critical-solid);
+  --probe-progress-indicator--warning: var(--probe-warning-solid);
+  --probe-progress-indicator--info: var(--probe-info-solid);
+  --probe-progress-indicator--disabled: var(--probe-border-secondary);
+  --probe-progress-label-text: var(--probe-text-secondary);
+  --probe-progress-transition: var(--probe-duration) var(--probe-ease);
+
+  /* =====================================================================
+   * SPINNER
+   * =================================================================== */
+  --probe-spinner-size-sm: 14px;
+  --probe-spinner-size-md: 16px;
+  --probe-spinner-size-lg: 24px;
+  --probe-spinner-thickness: var(--probe-border-width-strong);
+  --probe-spinner-track: var(--probe-border-primary);
+  --probe-spinner-indicator: var(--probe-accent);
+  --probe-spinner-indicator--inverted: var(--probe-surface-page);
+  --probe-spinner-duration: 600ms;
+
+  /* =====================================================================
+   * SKELETON
+   * =================================================================== */
+  --probe-skeleton-height: 12px;
+  --probe-skeleton-radius: var(--probe-radius-none);
+  --probe-skeleton-background: var(--probe-surface-sunken);
+  --probe-skeleton-highlight: var(--probe-border-primary);
+  --probe-skeleton-duration: 1400ms;
+
+  /* =====================================================================
+   * KBD
+   * =================================================================== */
+  --probe-kbd-height: 18px;
+  --probe-kbd-padding-x: var(--probe-space-1);
+  --probe-kbd-min-width: 18px;
+  --probe-kbd-radius: var(--probe-radius-sm);
+  --probe-kbd-border-width: var(--probe-border-width);
+  --probe-kbd-font-family: var(--probe-font-mono);
+  --probe-kbd-font-size: var(--probe-text-2xs);
+  --probe-kbd-background: var(--probe-surface-sunken);
+  --probe-kbd-text: var(--probe-text-secondary);
+  --probe-kbd-border: var(--probe-border-secondary);
+  --probe-kbd-background--inverted: color-mix(in srgb, var(--probe-surface-page) 14%, transparent);
+  --probe-kbd-text--inverted: var(--probe-surface-page);
+  --probe-kbd-border--inverted: color-mix(in srgb, var(--probe-surface-page) 30%, transparent);
+
+  /* =====================================================================
+   * EMPTY STATE
+   * =================================================================== */
+  --probe-empty-state-padding: var(--probe-space-10);
+  --probe-empty-state-gap: var(--probe-space-3);
+  --probe-empty-state-icon-size: 24px;
+  --probe-empty-state-icon: var(--probe-text-faint);
+  --probe-empty-state-title-text: var(--probe-text-strong);
+  --probe-empty-state-title-font-size: var(--probe-text-lg);
+  --probe-empty-state-title-font-weight: var(--probe-weight-medium);
+  --probe-empty-state-description-text: var(--probe-text-secondary);
+  --probe-empty-state-description-font-size: var(--probe-text-base);
+  --probe-empty-state-background: transparent;
+  --probe-empty-state-border: var(--probe-border-primary);
+  --probe-empty-state-tracking: var(--probe-tracking-default);
+  --probe-empty-state-border-width: var(--probe-border-width);
+  --probe-empty-state-radius: var(--probe-radius-none);
+  --probe-empty-state-max-width: 520px;
+  --probe-empty-state-title-line-height: var(--probe-leading-lg);
+  --probe-empty-state-description-line-height: var(--probe-leading-base);
+  --probe-empty-state-title-gap: var(--probe-space-1);
+  --probe-empty-state-actions-gap: var(--probe-space-2);
+  /* The cause / reason / filter-summary line. One step quieter than the
+   * description: it is evidence for the headline, not the headline. */
+  --probe-empty-state-note-text: var(--probe-text-secondary);
+  --probe-empty-state-note-font-size: var(--probe-text-sm);
+  --probe-empty-state-note-line-height: var(--probe-leading-sm);
+  --probe-empty-state-suggestions-gap: var(--probe-space-3);
+  --probe-empty-state-suggestions-min-column: 200px;
+  --probe-empty-state-tile-padding: var(--probe-space-3);
+  --probe-empty-state-tile-gap: var(--probe-space-1);
+  --probe-empty-state-tile-radius: var(--probe-radius-none);
+  --probe-empty-state-tile-border-width: var(--probe-border-width);
+  --probe-empty-state-tile-background: var(--probe-surface-raised);
+  --probe-empty-state-tile-background--hover: var(--probe-hover-overlay);
+  --probe-empty-state-tile-border: var(--probe-border-primary);
+  --probe-empty-state-tile-border--hover: var(--probe-border-secondary);
+  --probe-empty-state-tile-title-text: var(--probe-text-primary);
+  --probe-empty-state-tile-title-font-size: var(--probe-text-base);
+  --probe-empty-state-tile-title-font-weight: var(--probe-weight-medium);
+  --probe-empty-state-tile-description-text: var(--probe-text-secondary);
+  --probe-empty-state-tile-description-font-size: var(--probe-text-sm);
+  --probe-empty-state-tile-icon: var(--probe-text-faint);
+  --probe-empty-state-tile-icon-size: 16px;
+  --probe-empty-state-tile-transition: var(--probe-duration) var(--probe-ease);
+  --probe-empty-state-tile-focus-ring: var(--probe-focus-ring);
+  --probe-empty-state-tile-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-empty-state-tile-focus-ring-offset: var(--probe-focus-ring-offset);
+
+  /* =====================================================================
+   * ERROR STATE — geometry mirrors EMPTY STATE so the two are swappable at
+   * a call site, but every colour resolves to the critical ramp instead of
+   * the neutrals. That divergence is the whole point: "we could not find
+   * out" must not read as "there is nothing" (Law 2).
+   * =================================================================== */
+  --probe-error-state-padding: var(--probe-space-10);
+  --probe-error-state-gap: var(--probe-space-3);
+  --probe-error-state-max-width: 520px;
+  --probe-error-state-radius: var(--probe-radius-none);
+  --probe-error-state-border-width: var(--probe-border-width);
+  --probe-error-state-border: var(--probe-critical-border);
+  --probe-error-state-background: var(--probe-critical-bg);
+  --probe-error-state-tracking: var(--probe-tracking-default);
+  --probe-error-state-icon: var(--probe-critical-fg);
+  --probe-error-state-icon-size: 24px;
+  --probe-error-state-title-text: var(--probe-critical-fg);
+  --probe-error-state-title-font-size: var(--probe-text-lg);
+  --probe-error-state-title-font-weight: var(--probe-weight-medium);
+  --probe-error-state-title-line-height: var(--probe-leading-lg);
+  --probe-error-state-title-gap: var(--probe-space-1);
+  /* The server's sentence is body copy, not decoration: it stays at primary
+   * text contrast rather than dropping to the description grey. */
+  --probe-error-state-message-text: var(--probe-text-primary);
+  --probe-error-state-message-font-size: var(--probe-text-base);
+  --probe-error-state-message-line-height: var(--probe-leading-base);
+  --probe-error-state-actions-gap: var(--probe-space-2);
+  --probe-error-state-reason-text: var(--probe-text-secondary);
+  --probe-error-state-reason-font-size: var(--probe-text-sm);
+  --probe-error-state-reason-line-height: var(--probe-leading-sm);
+  --probe-error-state-details-gap: var(--probe-space-2);
+  --probe-error-state-details-summary-text: var(--probe-text-secondary);
+  --probe-error-state-details-summary-font-size: var(--probe-text-sm);
+  --probe-error-state-details-summary-line-height: var(--probe-leading-sm);
+  --probe-error-state-details-chevron-size: 14px;
+  --probe-error-state-details-padding: var(--probe-space-2);
+  --probe-error-state-details-background: var(--probe-surface-sunken);
+  --probe-error-state-details-border: var(--probe-border-primary);
+  --probe-error-state-details-border-width: var(--probe-border-width);
+  --probe-error-state-details-radius: var(--probe-radius-none);
+  --probe-error-state-details-text: var(--probe-text-secondary);
+  --probe-error-state-details-font-family: var(--probe-font-mono);
+  --probe-error-state-details-font-size: var(--probe-text-xs);
+  --probe-error-state-details-line-height: var(--probe-leading-xs);
+  --probe-error-state-details-transition: var(--probe-duration) var(--probe-ease);
+  --probe-error-state-details-focus-ring: var(--probe-focus-ring);
+  --probe-error-state-details-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-error-state-details-focus-ring-offset: var(--probe-focus-ring-offset);
+
+  /* =====================================================================
+   * STAT — delta colour is always paired with an arrow glyph
+   * =================================================================== */
+  --probe-stat-gap: var(--probe-space-1);
+  --probe-stat-label-text: var(--probe-text-secondary);
+  --probe-stat-label-font-size: var(--probe-text-xs);
+  --probe-stat-label-font-weight: var(--probe-weight-medium);
+  --probe-stat-label-tracking: var(--probe-tracking-wide);
+  --probe-stat-value-text: var(--probe-text-strong);
+  --probe-stat-value-font-size: var(--probe-text-2xl);
+  --probe-stat-value-line-height: var(--probe-leading-2xl);
+  --probe-stat-value-font-weight: var(--probe-weight-medium);
+  --probe-stat-value-tracking: var(--probe-tracking-tight);
+  --probe-stat-caption-text: var(--probe-text-faint);
+  --probe-stat-delta-text: var(--probe-text-secondary);
+  --probe-stat-delta-text--success: var(--probe-success-fg);
+  --probe-stat-delta-text--critical: var(--probe-critical-fg);
+  --probe-stat-delta-font-size: var(--probe-text-xs);
+  --probe-stat-tracking: var(--probe-tracking-default);
+  --probe-stat-delta-font-weight: var(--probe-weight-medium);
+  --probe-stat-delta-gap: var(--probe-space-1);
+  --probe-stat-delta-icon-size: 14px;
+  --probe-stat-label-line-height: var(--probe-leading-xs);
+  --probe-stat-caption-font-size: var(--probe-text-xs);
+  --probe-stat-caption-line-height: var(--probe-leading-xs);
+  --probe-stat-sparkline-height: 32px;
+  --probe-stat-sparkline-gap: var(--probe-space-2);
+
+  /* =====================================================================
+   * LINK
+   * =================================================================== */
+  --probe-link-text: var(--probe-text-link);
+  --probe-link-text--hover: var(--probe-text-link-hover);
+  --probe-link-text--active: var(--probe-text-link-hover);
+  --probe-link-text--disabled: var(--probe-text-disabled);
+  --probe-link-text--inverted: var(--probe-surface-page);
+  --probe-link-underline: currentColor;
+  --probe-link-underline-offset: 2px;
+  --probe-link-underline-thickness: var(--probe-border-width);
+  --probe-link-focus-ring: var(--probe-focus-ring);
+  --probe-link-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-link-focus-ring-offset: var(--probe-focus-ring-offset);
+  --probe-link-transition: var(--probe-duration) var(--probe-ease);
+  /* The external-link glyph rides a step below the text size so it reads as a
+   * mark on the link rather than a word in it. */
+  --probe-link-gap: var(--probe-space-1);
+  --probe-link-icon-size: 12px;
+
+  /* =====================================================================
+   * BADGE — `sm` scale + leading dot.
+   * `--probe-badge-height` and friends stay the `md` values.
+   * =================================================================== */
+  --probe-badge-height-sm: 16px;
+  --probe-badge-padding-x-sm: var(--probe-space-1);
+  --probe-badge-font-size-sm: var(--probe-text-2xs);
+  --probe-badge-line-height-sm: var(--probe-leading-2xs);
+  --probe-badge-icon-size-sm: 10px;
+  --probe-badge-dot-size: 6px;
+  --probe-badge-dot-size-sm: 5px;
+  --probe-badge-dot-radius: var(--probe-radius-circle);
+  --probe-badge-transition: var(--probe-duration) var(--probe-ease);
+
+  /* =====================================================================
+   * STATUS PILL — brand tone + live pulse.
+   * =================================================================== */
+  --probe-status-pill-line-height: var(--probe-leading-xs);
+  --probe-status-pill-tracking: var(--probe-tracking-default);
+  --probe-status-pill-dot-radius: var(--probe-radius-circle);
+  --probe-status-pill-dot--brand: var(--probe-accent);
+  --probe-status-pill-text--brand: var(--probe-accent);
+  --probe-status-pill-background--brand: var(--probe-accent-subtle);
+  --probe-status-pill-border--brand: var(--probe-accent-muted);
+  --probe-status-pill-pulse-duration: 1600ms;
+
+  /* =====================================================================
+   * ALERT — highlight tone, vertical rhythm, dismiss control.
+   * The dismiss control is alert-owned rather than borrowed from
+   * icon-button so the component reads only its own tier-3 tokens.
+   * =================================================================== */
+  --probe-alert-background--highlight: var(--probe-accent-subtle);
+  --probe-alert-border--highlight: var(--probe-accent-muted);
+  --probe-alert-icon--highlight: var(--probe-accent);
+  --probe-alert-title-text--highlight: var(--probe-accent);
+  --probe-alert-title-line-height: var(--probe-leading-base);
+  --probe-alert-body-line-height: var(--probe-leading-base);
+  --probe-alert-content-gap: var(--probe-space-1);
+  --probe-alert-actions-gap: var(--probe-space-2);
+  --probe-alert-actions-margin-top: var(--probe-space-2);
+  --probe-alert-transition: var(--probe-duration) var(--probe-ease);
+  --probe-alert-dismiss-size: 32px;
+  --probe-alert-dismiss-icon-size: 16px;
+  --probe-alert-dismiss-radius: var(--probe-radius-none);
+  --probe-alert-dismiss-background: transparent;
+  --probe-alert-dismiss-background--hover: var(--probe-hover-overlay);
+  --probe-alert-dismiss-background--active: var(--probe-active-overlay);
+  --probe-alert-dismiss-text: var(--probe-text-secondary);
+  --probe-alert-dismiss-text--hover: var(--probe-text-strong);
+  --probe-alert-dismiss-focus-ring: var(--probe-focus-ring);
+  --probe-alert-dismiss-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-alert-dismiss-focus-ring-offset: var(--probe-focus-ring-offset);
+
+  /* =====================================================================
+   * PROGRESS — label row, stripes, indeterminate sweep.
+   * The stripe mixes toward `surface-page`: white-ish in light over a dark
+   * indicator, dark-ish in dark over a light one. One declaration, both
+   * themes — same mirror trick used elsewhere in this file.
+   * =================================================================== */
+  --probe-progress-gap: var(--probe-space-2);
+  --probe-progress-label-font-size: var(--probe-text-xs);
+  --probe-progress-label-line-height: var(--probe-leading-xs);
+  --probe-progress-label-font-weight: var(--probe-weight-medium);
+  --probe-progress-value-text: var(--probe-text-faint);
+  --probe-progress-stripe-color: color-mix(in srgb, var(--probe-surface-page) 32%, transparent);
+  --probe-progress-stripe-size: 8px;
+  --probe-progress-stripe-duration: 900ms;
+  --probe-progress-indeterminate-width: 33%;
+  --probe-progress-indeterminate-duration: 1200ms;
+
+  /* =====================================================================
+   * SPINNER — the one circular element in the system.
+   * =================================================================== */
+  --probe-spinner-radius: var(--probe-radius-circle);
+
+  /* =====================================================================
+   * SKELETON — multi-line stacks + avatar shape.
+   * =================================================================== */
+  --probe-skeleton-line-gap: var(--probe-space-2);
+  --probe-skeleton-radius--circle: var(--probe-radius-circle);
+
+  /* =====================================================================
+   * SECTION NAV — the right-rail index for one long page. The rule is the
+   * list's, not the item's; the active item owns only a thicker, brighter
+   * segment of it and a brighter label. There is deliberately no fill, no
+   * radius and no selected font weight: the moment this reads as a chip
+   * strip, someone will start hiding sections behind it (teardown §3.15).
+   * =================================================================== */
+  --probe-section-nav-width: 200px;
+  --probe-section-nav-offset-top: var(--probe-space-6);
+  --probe-section-nav-max-height: calc(100vh - var(--probe-section-nav-offset-top) * 2);
+  --probe-section-nav-rule: var(--probe-border-primary);
+  --probe-section-nav-rule-width: var(--probe-border-width);
+  --probe-section-nav-rule--active: var(--probe-border-strong);
+  --probe-section-nav-rule-width--active: var(--probe-border-width-strong);
+  --probe-section-nav-item-padding-y: var(--probe-space-1);
+  --probe-section-nav-item-padding-left: var(--probe-space-3);
+  --probe-section-nav-font-size: var(--probe-text-sm);
+  --probe-section-nav-line-height: var(--probe-leading-sm);
+  --probe-section-nav-tracking: var(--probe-tracking-default);
+  --probe-section-nav-font-weight: var(--probe-weight-regular);
+  --probe-section-nav-item-text: var(--probe-text-secondary);
+  --probe-section-nav-item-text--hover: var(--probe-text-primary);
+  --probe-section-nav-item-text--active: var(--probe-text-strong);
+  --probe-section-nav-transition: var(--probe-duration) var(--probe-ease);
+  --probe-section-nav-focus-ring: var(--probe-focus-ring);
+  --probe-section-nav-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-section-nav-focus-ring-offset: var(--probe-focus-ring-offset);
+}
+
+/* =======================================================================
+ * Keyframes owned by the status group. Named with their component prefix
+ * for the same reason the tokens are: nothing else may reference them.
+ * Every consumer pairs these with Tailwind's `motion-reduce:` variant, so
+ * no `prefers-reduced-motion` media query is needed here.
+ * ===================================================================== */
+@keyframes probe-progress-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+@keyframes probe-progress-stripes {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: var(--probe-progress-stripe-size) 0;
+  }
+}
+
+@keyframes probe-skeleton-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* The halo starts flush with the dot and expands past it as it fades, so the
+ * dot itself never changes size and the pill's layout never reflows. */
+@keyframes probe-status-pill-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  to {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes probe-spinner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* =======================================================================
+ * OVERLAYS GROUP — appended tokens (tooltip, dialog, popover, toast).
+ * A separate `:root` block on purpose: these are additive and sit next to
+ * the pre-existing TOOLTIP / MENU / DIALOG / POPOVER blocks above rather
+ * than rewriting them. Same tier, same rules — every value resolves to a
+ * Tier 2 semantic token or a Tier 1b primitive.
+ * ===================================================================== */
+:root,
+[data-probe-theme],
+.dark,
+.probe-light,
+.probe-dark,
+.probe-light-hc,
+.probe-dark-hc {
+  /* TOOLTIP — typography only; the colour set above already inverts. */
+  --probe-tooltip-font-weight: var(--probe-weight-regular);
+  --probe-tooltip-tracking: var(--probe-tracking-default);
+  --probe-tooltip-gap: var(--probe-space-2);
+
+  /* DIALOG — widths, section chrome, close affordance.
+   * `-width-md` is the pre-existing `-width`, kept as the single source. */
+  --probe-dialog-width-sm: 360px;
+  --probe-dialog-width-md: var(--probe-dialog-width);
+  --probe-dialog-width-lg: 640px;
+  --probe-dialog-max-height: calc(100vh - var(--probe-space-16));
+  --probe-dialog-header-gap: var(--probe-space-1);
+  --probe-dialog-header-border: var(--probe-border-primary);
+  --probe-dialog-body-text: var(--probe-text-primary);
+  --probe-dialog-body-font-size: var(--probe-text-base);
+  --probe-dialog-footer-gap: var(--probe-space-2);
+  --probe-dialog-close-size: 32px;
+  --probe-dialog-close-icon-size: 16px;
+  --probe-dialog-close-background: transparent;
+  --probe-dialog-close-background--hover: var(--probe-hover-overlay);
+  --probe-dialog-close-background--active: var(--probe-active-overlay);
+  --probe-dialog-close-text: var(--probe-text-faint);
+  --probe-dialog-close-text--hover: var(--probe-text-primary);
+  --probe-dialog-focus-ring: var(--probe-focus-ring);
+  --probe-dialog-transition: var(--probe-duration) var(--probe-ease);
+
+  /* POPOVER — header typography. */
+  --probe-popover-gap: var(--probe-space-2);
+  --probe-popover-title-font-size: var(--probe-text-base);
+  --probe-popover-title-font-weight: var(--probe-weight-medium);
+  --probe-popover-description-text: var(--probe-text-secondary);
+  --probe-popover-description-font-size: var(--probe-text-base);
+  --probe-popover-focus-ring: var(--probe-focus-ring);
+
+  /* TOAST — no toast block existed. Tone colours the icon and the leading
+   * accent rule only; the surface stays neutral so a stack of mixed toasts
+   * still reads as one family. */
+  --probe-toast-width: 380px;
+  --probe-toast-padding: var(--probe-space-3);
+  --probe-toast-gap: var(--probe-space-3);
+  --probe-toast-content-gap: var(--probe-space-1);
+  --probe-toast-radius: var(--probe-radius-none);
+  --probe-toast-border-width: var(--probe-border-width);
+  --probe-toast-accent-width: var(--probe-border-width-strong);
+  --probe-toast-background: var(--probe-surface-overlay);
+  --probe-toast-border: var(--probe-border-secondary);
+  --probe-toast-title-text: var(--probe-text-strong);
+  --probe-toast-title-font-size: var(--probe-text-base);
+  --probe-toast-title-font-weight: var(--probe-weight-medium);
+  --probe-toast-description-text: var(--probe-text-secondary);
+  --probe-toast-description-font-size: var(--probe-text-base);
+  --probe-toast-icon-size: 16px;
+  --probe-toast-icon: var(--probe-text-faint);
+  --probe-toast-icon--success: var(--probe-success-fg);
+  --probe-toast-icon--critical: var(--probe-critical-fg);
+  --probe-toast-icon--warning: var(--probe-warning-fg);
+  --probe-toast-icon--info: var(--probe-info-fg);
+  --probe-toast-accent: var(--probe-border-strong);
+  --probe-toast-accent--success: var(--probe-success-solid);
+  --probe-toast-accent--critical: var(--probe-critical-solid);
+  --probe-toast-accent--warning: var(--probe-warning-solid);
+  --probe-toast-accent--info: var(--probe-info-solid);
+  --probe-toast-action-height: 32px;
+  --probe-toast-action-padding-x: var(--probe-space-2);
+  --probe-toast-action-border-width: var(--probe-border-width);
+  --probe-toast-action-background: transparent;
+  --probe-toast-action-background--hover: var(--probe-hover-overlay);
+  --probe-toast-action-background--active: var(--probe-active-overlay);
+  --probe-toast-action-text: var(--probe-text-primary);
+  --probe-toast-action-border: var(--probe-border-secondary);
+  --probe-toast-action-font-size: var(--probe-text-base);
+  --probe-toast-action-font-weight: var(--probe-weight-medium);
+  --probe-toast-close-size: 24px;
+  --probe-toast-close-icon-size: 14px;
+  --probe-toast-close-background: transparent;
+  --probe-toast-close-background--hover: var(--probe-hover-overlay);
+  --probe-toast-close-text: var(--probe-text-faint);
+  --probe-toast-close-text--hover: var(--probe-text-primary);
+  --probe-toast-focus-ring: var(--probe-focus-ring);
+  --probe-toast-transition: var(--probe-duration) var(--probe-ease);
+  --probe-toast-viewport-padding: var(--probe-space-4);
+  --probe-toast-viewport-gap: var(--probe-space-2);
+  --probe-toast-z-index: var(--probe-z-toast);
+}
+
+/* =======================================================================
+ * OVERLAYS GROUP — motion, arrows and the dropdown-menu additions.
+ * Every overlay enters and leaves with `tailwindcss-animate`, which needs a
+ * duration and an easing function as separate values — the `-transition`
+ * shorthands above cannot be split, hence the `-animation-*` pairs here.
+ * The `--probe-dropdown-menu-*` names extend, never replace, the shared
+ * MENU block (which is also worn by Select and ContextMenu).
+ * ===================================================================== */
+:root,
+[data-probe-theme],
+.dark,
+.probe-light,
+.probe-dark,
+.probe-light-hc,
+.probe-dark-hc {
+  /* TOOLTIP */
+  --probe-tooltip-arrow-size: 6px;
+  --probe-tooltip-animation-duration: var(--probe-duration);
+  --probe-tooltip-animation-ease: var(--probe-ease);
+
+  /* DROPDOWN MENU */
+  --probe-dropdown-menu-icon-size: 16px;
+  --probe-dropdown-menu-indicator-size: 14px;
+  --probe-dropdown-menu-indicator-width: var(--probe-space-4);
+  --probe-dropdown-menu-item-radius: var(--probe-radius-none);
+  --probe-dropdown-menu-label-padding-y: var(--probe-space-1);
+  --probe-dropdown-menu-label-line-height: var(--probe-leading-2xs);
+  --probe-dropdown-menu-label-font-weight: var(--probe-weight-medium);
+  --probe-dropdown-menu-separator-margin-y: var(--probe-space-1);
+  --probe-dropdown-menu-shortcut-gap: var(--probe-space-1);
+  --probe-dropdown-menu-shortcut-font-size: var(--probe-text-2xs);
+  --probe-dropdown-menu-item-line-height: var(--probe-leading-base);
+  --probe-dropdown-menu-transition: var(--probe-duration-fast) var(--probe-ease);
+  --probe-dropdown-menu-animation-duration: var(--probe-duration);
+  --probe-dropdown-menu-animation-ease: var(--probe-ease);
+
+  /* DIALOG */
+  --probe-dialog-title-line-height: var(--probe-leading-lg);
+  --probe-dialog-description-font-size: var(--probe-text-base);
+  --probe-dialog-description-line-height: var(--probe-leading-base);
+  --probe-dialog-body-line-height: var(--probe-leading-base);
+  --probe-dialog-close-radius: var(--probe-radius-none);
+  --probe-dialog-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-dialog-focus-ring-offset: var(--probe-focus-ring-offset);
+  --probe-dialog-animation-duration: var(--probe-duration);
+  --probe-dialog-animation-ease: var(--probe-ease);
+
+  /* POPOVER */
+  --probe-popover-font-size: var(--probe-text-base);
+  --probe-popover-line-height: var(--probe-leading-base);
+  --probe-popover-title-line-height: var(--probe-leading-base);
+  --probe-popover-description-line-height: var(--probe-leading-base);
+  --probe-popover-arrow-size: 6px;
+  --probe-popover-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-popover-focus-ring-offset: var(--probe-focus-ring-offset);
+  --probe-popover-animation-duration: var(--probe-duration);
+  --probe-popover-animation-ease: var(--probe-ease);
+
+  /* TOAST */
+  --probe-toast-title-line-height: var(--probe-leading-base);
+  --probe-toast-description-line-height: var(--probe-leading-base);
+  --probe-toast-action-radius: var(--probe-radius-none);
+  --probe-toast-action-line-height: var(--probe-leading-base);
+  --probe-toast-close-radius: var(--probe-radius-none);
+  --probe-toast-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-toast-focus-ring-offset: var(--probe-focus-ring-offset);
+  --probe-toast-animation-duration: var(--probe-duration);
+  --probe-toast-animation-ease: var(--probe-ease);
+}
+
+/* =======================================================================
+ * DATA GROUP — Table / DataList / TreeView, plus the one metric the
+ * overlays block left out. Same rule as everywhere above: colour resolves
+ * to Tier 2, metrics and motion to Tier 1b, nothing reaches a ramp step.
+ * ===================================================================== */
+:root,
+[data-probe-theme],
+.dark,
+.probe-light,
+.probe-dark,
+.probe-light-hc,
+.probe-dark-hc {
+  /* TOOLTIP — the border colour was declared above without its width. */
+  --probe-tooltip-border-width: var(--probe-border-width);
+
+  /* TABLE */
+  --probe-table-radius: var(--probe-radius-none);
+  --probe-table-line-height: var(--probe-leading-base);
+  --probe-table-header-gap: var(--probe-space-1);
+  --probe-table-header-line-height: var(--probe-leading-xs);
+  --probe-table-sort-icon-size: 14px;
+  --probe-table-header-focus-ring: var(--probe-focus-ring);
+  --probe-table-header-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-table-header-focus-ring-offset: calc(-1 * var(--probe-focus-ring-offset));
+  --probe-table-caption-text: var(--probe-text-secondary);
+  --probe-table-caption-font-size: var(--probe-text-sm);
+  --probe-table-caption-line-height: var(--probe-leading-sm);
+  --probe-table-caption-padding-y: var(--probe-space-2);
+  --probe-table-transition: var(--probe-duration) var(--probe-ease);
+
+  /* DATA LIST */
+  --probe-data-list-border-width: var(--probe-border-width);
+  --probe-data-list-line-height: var(--probe-leading-base);
+  --probe-data-list-term-font-weight: var(--probe-weight-regular);
+
+  /* TREE VIEW */
+  --probe-tree-view-radius: var(--probe-radius-none);
+  --probe-tree-view-line-height: var(--probe-leading-base);
+  --probe-tree-view-icon-size: 14px;
+  --probe-tree-view-guide-width: var(--probe-border-width);
+  --probe-tree-view-focus-ring-width: var(--probe-focus-ring-width);
+  /* Inset, because a treeitem is flush against its neighbours: a positive
+   * offset would be painted over by the next row's background. */
+  --probe-tree-view-focus-ring-offset: calc(-1 * var(--probe-focus-ring-offset));
+  --probe-tree-view-transition: var(--probe-duration-fast) var(--probe-ease);
+}
+
+/* =======================================================================
+ * CONFIRM — built on Dialog, so it inherits the surface, the typography
+ * and the footer chrome. Only the four values Dialog has no opinion on
+ * live here: the object line reads a step stronger than the rest of the
+ * description, and the irreversibility sentence borrows the critical
+ * foreground so it warns without needing a banner around it.
+ * ===================================================================== */
+:root,
+[data-probe-theme],
+.dark,
+.probe-light,
+.probe-dark,
+.probe-light-hc,
+.probe-dark-hc {
+  --probe-confirm-gap: var(--probe-space-2);
+  --probe-confirm-object-text: var(--probe-text-primary);
+  --probe-confirm-irreversible-text: var(--probe-critical-fg);
+  --probe-confirm-irreversible-font-weight: var(--probe-weight-medium);
+}
+
+/* =======================================================================
+ * RESTRICTION — the three kinds of no. The kind is carried by colour AND
+ * by a distinct icon shape, never by colour alone: `plan` borrows the
+ * accent (it is a sale), `state` the info tone (it is fixable now), and
+ * `role` stays neutral (nothing is wrong, the actor is).
+ *
+ * The marker is ONE concept at two sizes, so `glyph` and `pill` share the
+ * colour tokens and differ only in metrics — the pill adds the chrome the
+ * glyph has no room for, and nothing else changes.
+ *
+ * The explanation body reuses Popover's surface and typography; only the
+ * three values Popover has no opinion on (the price line, the unlock list,
+ * the "ask" note) live here.
+ * ===================================================================== */
+:root,
+[data-probe-theme],
+.dark,
+.probe-light,
+.probe-dark,
+.probe-light-hc,
+.probe-dark-hc {
+  --probe-restriction-gap: var(--probe-space-2);
+  --probe-restriction-note-font-size: var(--probe-text-sm);
+  --probe-restriction-note-line-height: var(--probe-leading-sm);
+  --probe-restriction-note-text: var(--probe-text-secondary);
+  --probe-restriction-owner-text: var(--probe-text-primary);
+  --probe-restriction-owner-font-weight: var(--probe-weight-medium);
+
+  /* MARKER — shared across both sizes. */
+  --probe-restriction-marker-gap: var(--probe-space-1);
+  --probe-restriction-marker-glyph-size: 14px;
+  --probe-restriction-marker-pill-height: 20px;
+  --probe-restriction-marker-pill-padding-x: var(--probe-space-1);
+  --probe-restriction-marker-pill-icon-size: 12px;
+  --probe-restriction-marker-pill-font-size: var(--probe-text-2xs);
+  --probe-restriction-marker-pill-line-height: var(--probe-leading-2xs);
+  --probe-restriction-marker-pill-font-weight: var(--probe-weight-medium);
+  --probe-restriction-marker-pill-tracking: var(--probe-tracking-wide);
+  --probe-restriction-marker-pill-radius: var(--probe-radius-none);
+  --probe-restriction-marker-border-width: var(--probe-border-width);
+
+  --probe-restriction-marker-text--plan: var(--probe-accent);
+  --probe-restriction-marker-background--plan: var(--probe-accent-subtle);
+  --probe-restriction-marker-border--plan: var(--probe-accent-muted);
+  --probe-restriction-marker-text--role: var(--probe-text-secondary);
+  --probe-restriction-marker-background--role: var(--probe-surface-sunken);
+  --probe-restriction-marker-border--role: var(--probe-border-primary);
+  --probe-restriction-marker-text--state: var(--probe-info-fg);
+  --probe-restriction-marker-background--state: var(--probe-info-bg);
+  --probe-restriction-marker-border--state: var(--probe-info-border);
+
+  /* DETAILS — the panel the enabled control opens. */
+  --probe-restriction-details-gap: var(--probe-space-2);
+  --probe-restriction-price-font-size: var(--probe-text-lg);
+  --probe-restriction-price-line-height: var(--probe-leading-lg);
+  --probe-restriction-price-font-weight: var(--probe-weight-semibold);
+  --probe-restriction-price-text: var(--probe-text-strong);
+  --probe-restriction-unlocks-gap: var(--probe-space-1);
+  --probe-restriction-unlocks-indent: var(--probe-space-4);
+  --probe-restriction-unlocks-font-size: var(--probe-text-sm);
+  --probe-restriction-unlocks-line-height: var(--probe-leading-sm);
+  --probe-restriction-unlocks-text: var(--probe-text-secondary);
+  --probe-restriction-unlocks-marker: var(--probe-text-faint);
+  --probe-restriction-actions-margin-top: var(--probe-space-1);
+}
+
+/* =======================================================================
+ * TOOLBAR — the arrangement layer. It owns no colour and no seam: the
+ * seam belongs to ButtonGroup, which Toolbar composes rather than
+ * duplicates. What lives here is the spacing between groups and the one
+ * hairline that separates them.
+ * ===================================================================== */
+:root,
+[data-probe-theme],
+.dark,
+.probe-light,
+.probe-dark,
+.probe-light-hc,
+.probe-dark-hc {
+  --probe-toolbar-gap: var(--probe-space-2);
+  --probe-toolbar-group-gap: var(--probe-space-3);
+  --probe-toolbar-padding-x: var(--probe-space-0);
+  --probe-toolbar-padding-y: var(--probe-space-0);
+  --probe-toolbar-separator-thickness: var(--probe-border-width);
+  --probe-toolbar-separator-inset: var(--probe-space-1);
+  --probe-toolbar-separator-color: var(--probe-border-primary);
+}
+
+/* =======================================================================
+ * SHEET — the edge-anchored panel. A peer of Dialog, not a child of it:
+ * it owns its own names so a sheet can diverge from a dialog later
+ * without a rename, even though today most values resolve to the same
+ * Tier 2 semantics.
+ *
+ * The size scale is deliberately ONE choice (`sm`…`xl`) spanning both
+ * axes: each step publishes an inline size and a block size, and the
+ * side picks the axis it needs. That is what stops the ad-hoc mess the
+ * audit found — `w-[800px]`, `w-[60vw]`, `sm:max-w-xl` and `w-[720px]`
+ * all meaning "wide" — from growing back.
+ *
+ * `inset` is the strip of page left visible at the far edge. A sheet
+ * that covers the whole viewport is a page wearing a costume, and the
+ * visible strip is what tells the user the list is still behind it.
+ * ===================================================================== */
+:root,
+[data-probe-theme],
+.dark,
+.probe-light,
+.probe-dark,
+.probe-light-hc,
+.probe-dark-hc {
+  --probe-sheet-width-sm: 360px;
+  --probe-sheet-width-md: 480px;
+  --probe-sheet-width-lg: 640px;
+  --probe-sheet-width-xl: 800px;
+  --probe-sheet-height-sm: 240px;
+  --probe-sheet-height-md: 360px;
+  --probe-sheet-height-lg: 480px;
+  --probe-sheet-height-xl: 640px;
+  --probe-sheet-inset: var(--probe-space-10);
+
+  --probe-sheet-padding: var(--probe-space-5);
+  --probe-sheet-gap: var(--probe-space-4);
+  --probe-sheet-radius: var(--probe-radius-none);
+  --probe-sheet-border-width: var(--probe-border-width);
+  --probe-sheet-background: var(--probe-surface-overlay);
+  --probe-sheet-border: var(--probe-border-secondary);
+  --probe-sheet-scrim: var(--probe-overlay-scrim);
+  --probe-sheet-z-index: var(--probe-z-modal);
+  --probe-sheet-scrim-z-index: var(--probe-z-overlay);
+
+  --probe-sheet-header-gap: var(--probe-space-1);
+  --probe-sheet-header-border: var(--probe-border-primary);
+  --probe-sheet-footer-gap: var(--probe-space-2);
+  --probe-sheet-footer-border: var(--probe-border-primary);
+
+  --probe-sheet-title-text: var(--probe-text-strong);
+  --probe-sheet-title-font-size: var(--probe-text-lg);
+  --probe-sheet-title-line-height: var(--probe-leading-lg);
+  --probe-sheet-title-font-weight: var(--probe-weight-medium);
+  --probe-sheet-description-text: var(--probe-text-secondary);
+  --probe-sheet-description-font-size: var(--probe-text-base);
+  --probe-sheet-description-line-height: var(--probe-leading-base);
+  --probe-sheet-body-text: var(--probe-text-primary);
+  --probe-sheet-body-font-size: var(--probe-text-base);
+  --probe-sheet-body-line-height: var(--probe-leading-base);
+
+  --probe-sheet-close-size: 32px;
+  --probe-sheet-close-icon-size: 16px;
+  --probe-sheet-close-radius: var(--probe-radius-none);
+  --probe-sheet-close-background: transparent;
+  --probe-sheet-close-background--hover: var(--probe-hover-overlay);
+  --probe-sheet-close-background--active: var(--probe-active-overlay);
+  --probe-sheet-close-text: var(--probe-text-faint);
+  --probe-sheet-close-text--hover: var(--probe-text-primary);
+
+  --probe-sheet-focus-ring: var(--probe-focus-ring);
+  --probe-sheet-focus-ring-width: var(--probe-focus-ring-width);
+  --probe-sheet-focus-ring-offset: var(--probe-focus-ring-offset);
+  --probe-sheet-transition: var(--probe-duration) var(--probe-ease);
+  --probe-sheet-animation-duration: var(--probe-duration);
+  --probe-sheet-animation-ease: var(--probe-ease);
+}

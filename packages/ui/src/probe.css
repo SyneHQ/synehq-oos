@@ -1,0 +1,20 @@
+/**
+ * Probe — design system entry point.
+ *
+ * Import order is the tier order and is load-bearing: primitives must exist
+ * before themes reference them, and themes before components reference them.
+ *
+ * Import it as the FIRST rule of the app's global stylesheet — above the
+ * `@tailwind` directives, not below them. CSS requires `@import` to precede
+ * every other rule, and a misplaced one is dropped without an error.
+ *
+ * @example
+ * // src/app/global.css, line 1
+ * @import "../packages/probe/probe.css";
+ *
+ * @tailwind base;
+ */
+
+@import "./tokens/primitives.css";
+@import "./tokens/themes.css";
+@import "./tokens/components.css";
