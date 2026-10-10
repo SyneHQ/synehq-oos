@@ -82,7 +82,7 @@ jobs:
           IMAGE: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}-${{ matrix.arch }}
           EXPECTED_ARCH: ${{ matrix.arch }}
         run: |
-          sudo sh deploy/run-container.sh "$IMAGE"
+          sudo env AUTH_URL=http://127.0.0.1:3100 sh deploy/run-container.sh "$IMAGE"
           node tests/container-smoke.mjs
       - name: Show failed container logs
         if: failure()
@@ -120,6 +120,7 @@ jobs:
           name: container-digest-${{ matrix.arch }}
           path: ${{ runner.temp }}/digests/${{ matrix.arch }}
           retention-days: 1
+          overwrite: true
           if-no-files-found: error
   publish:
     needs: container
