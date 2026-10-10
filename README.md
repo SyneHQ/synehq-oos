@@ -80,7 +80,7 @@ Use a Linux `amd64` or `arm64` host with cgroup v2, Landlock ABI 3 or later, and
 
 For development without Docker, use the [source installation guide](docs/development.md).
 
-Hakopod integration is in progress. Read the [integration plan](docs/hakopod-integration.md) for `/synehq/` builds, access boundaries, and remaining work.
+Hakopod can sync managed database connections and open the explorer with its current browser session. Read the [integration guide](docs/hakopod-integration.md) to configure a separate instance for each scope. Automatic Kubernetes installation is not available yet.
 
 The public installer and release images are not ready. Read the [operations guide](docs/operations.md) for backup, restore, recovery, and key rotation.
 

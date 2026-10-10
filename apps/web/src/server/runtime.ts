@@ -1,3 +1,5 @@
+import { managedMode, authenticateControl, managedConfig } from "./hakopod";
+import { appStore } from "./store";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
@@ -217,6 +219,7 @@ async function staticResponse(
 
 export function createRequestHandler(options: ServerOptions = {}) {
   const origin = publicUrl();
+  if (managedMode()) managedConfig();
   const basePath = serverBasePath();
   const staticDir = resolve(options.staticDir ?? process.env.OOS_STATIC_DIR ?? "apps/web/out");
   const buildConfig = join(staticDir, "oos-build.json");
@@ -254,6 +257,17 @@ export function createRequestHandler(options: ServerOptions = {}) {
           pathname,
           true,
         );
+      if (managedMode() && pathname === "/internal/hakopod/sync") {
+        authenticateControl(request);
+        if (request.method !== "POST") return response({ error: "Use POST." }, 405);
+        await appStore().importManagedConnections(await request.json());
+        return response({ synced: true });
+      }
+      if (managedMode() && (pathname === "/api/setup" || pathname.startsWith("/api/auth/"))) {
+        if (pathname === "/api/setup" && request.method === "GET")
+          return response({ initialized: true, allowSignup: false, recoveryRequired: false });
+        return response({ error: "Manage your login in Hakopod." }, 403);
+      }
       if (pathname.startsWith("/api/auth/")) {
         if (request.method !== "GET" && request.method !== "POST")
           return new Response(null, { status: 405, headers: { Allow: "GET, POST" } });
@@ -389,7 +403,11 @@ export async function startServer(options: ServerOptions = {}): Promise<Server> 
       const method = request.method ?? "GET";
       const payload = await readBody(
         request,
-        pathname.startsWith("/api/auth/") ? MAX_AUTH_BODY_BYTES : MAX_BODY_BYTES,
+        pathname === "/internal/hakopod/sync" && managedMode()
+          ? 2 * 1024 * 1024
+          : pathname.startsWith("/api/auth/")
+            ? MAX_AUTH_BODY_BYTES
+            : MAX_BODY_BYTES,
       );
       if ((method === "GET" || method === "HEAD") && payload)
         throw new StoreError(400, "This request method cannot include a body.");

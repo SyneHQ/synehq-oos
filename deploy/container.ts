@@ -1,3 +1,4 @@
+import { managedMode } from "../apps/web/src/server/hakopod";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -133,7 +134,7 @@ async function main() {
   }
   if (!ready) throw new Error("Kelvo did not pass startup checks.");
   console.log("SyneHQ OOS is ready. Open the configured public URL.");
-  if (!(await appStore().setupStatus()).initialized)
+  if (!managedMode() && !(await appStore().setupStatus()).initialized)
     console.log("Run the local setup-token command to create the installation owner.");
 }
 

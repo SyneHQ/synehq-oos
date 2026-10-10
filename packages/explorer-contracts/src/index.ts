@@ -9,6 +9,7 @@ export interface OwnerSummary {
 }
 
 export interface ConnectionSummary {
+  managed?: boolean;
   id: string;
   label: string;
   engine: DatabaseEngine;

@@ -1,6 +1,9 @@
 import type { OwnerSummary, ConnectionDraftInput } from "@synehq-oos/explorer-contracts";
 
 export interface OwnerIdentity extends OwnerSummary {
+  actor?: string;
+  canManage?: boolean;
+  canWrite?: boolean;
   authVersion: number;
   sessionId: string;
 }

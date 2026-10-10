@@ -8,6 +8,7 @@ datasource db {
 }
 
 model Instance {
+  managedScope String?
   id             Int       @id @default(1)
   installationId String    @unique
   initializedAt  DateTime?
@@ -39,6 +40,8 @@ model Owner {
 }
 
 model OwnerSession {
+  managedActor String?
+  managedTicket String?
   id          String    @id
   ownerId     String
   owner       Owner     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
@@ -52,6 +55,8 @@ model OwnerSession {
 }
 
 model Connection {
+  managedSource String? @unique
+  managedFingerprint String?
   id                String    @id
   ownerId           String
   owner             Owner     @relation(fields: [ownerId], references: [id], onDelete: Restrict)

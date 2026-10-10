@@ -16,7 +16,19 @@ test("bundled migrations initialize once and preserve an existing installation",
     const before = db
       .prepare("SELECT checksum FROM _prisma_migrations ORDER BY migration_name")
       .all();
-    assert.equal(before.length, 5);
+    assert.equal(before.length, 6);
+    assert.ok(
+      db
+        .prepare("PRAGMA table_info(Instance)")
+        .all()
+        .some((row) => row.name === "managedScope"),
+    );
+    assert.ok(
+      db
+        .prepare("PRAGMA table_info(OwnerSession)")
+        .all()
+        .some((row) => row.name === "managedActor"),
+    );
     db.close();
     migrateMetadata(path, migrations);
     const after = new DatabaseSync(path);

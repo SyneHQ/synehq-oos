@@ -104,6 +104,9 @@ export function Workspace({
   const [aiSettings, setAiSettings] = useState(false);
   const [navigationLocked, setNavigationLocked] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [managed, setManaged] = useState(false);
+  const [canManage, setCanManage] = useState(true);
+  const [managedScope, setManagedScope] = useState("");
   const [signOutError, setSignOutError] = useState("");
   const [testState, setTestState] = useState<
     Record<string, { busy?: boolean; message: string; ok?: boolean }>
@@ -121,7 +124,12 @@ export function Workspace({
     setLoading(true);
     setError("");
     try {
-      const session = await api<{ owner: OwnerSummary | null }>("/api/session", { signal });
+      const session = await api<{
+        owner: OwnerSummary | null;
+        managed?: boolean;
+        canManage?: boolean;
+        scope?: string;
+      }>("/api/session", { signal });
       if (!session.owner) {
         const setup = await api<{ initialized: boolean }>("/api/setup", { signal });
         window.location.replace(applicationPath(setup.initialized ? "/login/" : "/setup/"));
@@ -130,6 +138,18 @@ export function Workspace({
       const data = await api<{ connections: ConnectionSummary[] }>("/api/connections", {
         signal,
       });
+      setManaged(session.managed === true);
+      setCanManage(session.canManage !== false);
+      let visibleScope = session.scope ?? "";
+      const scopedPath = /^\/synehq\/s\/([A-Za-z0-9_-]+)/.exec(window.location.pathname);
+      if (session.managed && scopedPath) {
+        try {
+          const context = JSON.parse(atob(scopedPath[1].replaceAll("-", "+").replaceAll("_", "/")));
+          if (typeof context.project === "string" && typeof context.environment === "string")
+            visibleScope = `${context.project} / ${context.environment}${context.workspace ? ` / ${context.workspace.slice(0, 8)}` : ""}`;
+        } catch {}
+      }
+      setManagedScope(visibleScope);
       setOwner(session.owner);
       setConnections(data.connections);
     } catch (cause) {
@@ -145,6 +165,10 @@ export function Workspace({
   }, [load]);
   async function leaveSession() {
     if (navigationLocked || signingOut) return;
+    if (managed) {
+      window.location.assign("/");
+      return;
+    }
     setSigningOut(true);
     setSignOutError("");
     try {
@@ -209,6 +233,9 @@ export function Workspace({
           {error || "Sign in to continue."}
         </p>
         <Button onClick={() => void load()}>Retry</Button>
+        {typeof window !== "undefined" && window.location.pathname.startsWith("/synehq/s/") && (
+          <a href="/">Back to Hakopod</a>
+        )}
       </div>
     );
   return (
@@ -278,9 +305,12 @@ export function Workspace({
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                disabled={navigationLocked}
+                disabled={navigationLocked || !canManage}
                 icon={<Plus />}
                 onSelect={() => setAdding(true)}
+                aria-label={
+                  canManage ? "Add connection" : "Hakopod permission required to add connections"
+                }
               >
                 Add connection
               </DropdownMenuItem>
@@ -297,11 +327,17 @@ export function Workspace({
             Connections<span className="nav-count">{connections.length}</span>
           </a>
         </nav>
+        {managed && (
+          <span className="managed-scope" title={managedScope}>
+            {managedScope}
+          </span>
+        )}
         <div className="header-actions">
           <Button
             size="sm"
             variant="primary"
-            disabled={navigationLocked}
+            disabled={navigationLocked || !canManage}
+            title={!canManage ? "Ask a Hakopod administrator to add connections." : undefined}
             iconStart={<Plus />}
             aria-label="Add connection"
             onClick={() => setAdding(true)}
@@ -311,7 +347,8 @@ export function Workspace({
           <Button
             size="sm"
             variant="ghost"
-            disabled={navigationLocked}
+            disabled={navigationLocked || !canManage}
+            title={!canManage ? "Ask a Hakopod administrator to change AI settings." : undefined}
             iconStart={<Settings2 />}
             aria-label="AI settings"
             onClick={() => setAiSettings(true)}
@@ -324,7 +361,7 @@ export function Workspace({
               <button
                 className="header-owner"
                 disabled={navigationLocked || signingOut}
-                aria-label={`Owner menu: ${owner.name}`}
+                aria-label={`${managed ? "Account" : "Owner"} menu: ${owner.name}`}
               >
                 <span className="owner-avatar" aria-hidden="true">
                   {owner.name.slice(0, 1).toUpperCase()}
@@ -335,7 +372,7 @@ export function Workspace({
             <DropdownMenuContent align="end" className="header-owner-menu">
               <DropdownMenuLabel className="header-owner-label">
                 <strong>{owner.name}</strong>
-                <span>Installation owner</span>
+                <span>{managed ? "Hakopod account" : "Installation owner"}</span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -343,7 +380,7 @@ export function Workspace({
                 icon={<LogOut />}
                 onSelect={() => void leaveSession()}
               >
-                Sign out
+                {managed ? "Back to Hakopod" : "Sign out"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -354,6 +391,17 @@ export function Workspace({
           {signOutError}
         </div>
       )}
+      {error && connectionId && (
+        <div role="alert" className="form-error">
+          {error}
+        </div>
+      )}
+      {managed && !canManage && (
+        <p className="managed-help">
+          Your Hakopod role permits data access. Ask an administrator to add connections or change
+          AI settings.
+        </p>
+      )}
       <main className="workspace-main">
         {connectionId ? (
           connection ? (
@@ -361,7 +409,10 @@ export function Workspace({
               key={`${connection.id}:${connection.revision}`}
               connection={connection}
               initialView={initialView}
-              onAISettings={() => setAiSettings(true)}
+              onAISettings={() => {
+                if (canManage) setAiSettings(true);
+                else setError("Ask a Hakopod administrator to change AI settings.");
+              }}
               onNavigationLock={setNavigationLocked}
             />
           ) : (
@@ -399,7 +450,15 @@ export function Workspace({
                   Browse rows, inspect your schema, and see how tables connect. No data import
                   required.
                 </p>
-                <Button variant="primary" iconEnd={<ArrowRight />} onClick={() => setAdding(true)}>
+                <Button
+                  variant="primary"
+                  disabled={!canManage}
+                  title={
+                    !canManage ? "Managed databases appear here when they are ready." : undefined
+                  }
+                  iconEnd={<ArrowRight />}
+                  onClick={() => setAdding(true)}
+                >
                   Add a connection
                 </Button>
                 <div className="supported-engines">
@@ -472,14 +531,16 @@ export function Workspace({
                       >
                         Test
                       </Button>
-                      <button
-                        className="icon-button delete-connection"
-                        disabled={deleting === item.id}
-                        onClick={() => void remove(item)}
-                        aria-label={`Remove ${item.label}`}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      {canManage && !item.managed && (
+                        <button
+                          className="icon-button delete-connection"
+                          disabled={deleting === item.id}
+                          onClick={() => void remove(item)}
+                          aria-label={`Remove ${item.label}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                       <a
                         className="open-connection"
                         href={applicationPath(`/explorer/${encodeURIComponent(item.id)}`)}
