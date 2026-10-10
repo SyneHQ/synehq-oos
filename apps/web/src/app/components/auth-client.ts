@@ -1,3 +1,4 @@
+import { applicationPath } from "../../paths";
 import type { OwnerSummary } from "@synehq-oos/explorer-contracts";
 import { api } from "./api";
 
@@ -31,7 +32,7 @@ export async function signInOwner(email: string, password: string): Promise<void
   const result = await authForm("callback/credentials", {
     email,
     password,
-    callbackUrl: "/connections/",
+    callbackUrl: applicationPath("/connections/"),
   });
   if (result.searchParams.has("error"))
     throw new Error("Sign-in failed. Check your email and password.");
@@ -40,7 +41,7 @@ export async function signInOwner(email: string, password: string): Promise<void
 }
 
 export async function signOutOwner(): Promise<void> {
-  const result = await authForm("signout", { callbackUrl: "/login/" });
+  const result = await authForm("signout", { callbackUrl: applicationPath("/login/") });
   if (result.searchParams.has("error")) throw new Error("Sign-out could not complete. Try again.");
   const session = await api<{ owner: OwnerSummary | null }>("/api/session");
   if (session?.owner !== null) throw new Error("Sign-out could not be confirmed. Try again.");

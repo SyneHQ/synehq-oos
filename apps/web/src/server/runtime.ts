@@ -1,11 +1,12 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import { extname, isAbsolute, join, relative, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { once } from "node:events";
-import { authHandler, publicUrl } from "./auth";
+import { authHandler, publicUrl, serverBasePath } from "./auth";
+import { stripBasePath } from "../paths";
 import { checkOrigin, response } from "./http";
 import { StoreError } from "./store";
 import * as setup from "./api/setup/route";
@@ -216,7 +217,15 @@ async function staticResponse(
 
 export function createRequestHandler(options: ServerOptions = {}) {
   const origin = publicUrl();
+  const basePath = serverBasePath();
   const staticDir = resolve(options.staticDir ?? process.env.OOS_STATIC_DIR ?? "apps/web/out");
+  const buildConfig = join(staticDir, "oos-build.json");
+  if (existsSync(buildConfig)) {
+    if (JSON.parse(readFileSync(buildConfig, "utf8")).basePath !== basePath)
+      throw new Error("The static dashboard and server must use the same base path.");
+  } else if (basePath) {
+    throw new Error("Build the static dashboard with the configured base path before starting.");
+  }
   return async function handleRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
     let pathname: string | undefined;
@@ -225,6 +234,11 @@ export function createRequestHandler(options: ServerOptions = {}) {
       if (url.origin !== origin.origin)
         throw new StoreError(403, "This request must come from this installation.");
       pathname = requestPath(url.pathname);
+      if (pathname !== "/healthz") {
+        const unprefixed = stripBasePath(pathname, basePath);
+        if (unprefixed === null) return response({ error: "Not found." }, 404);
+        pathname = unprefixed;
+      }
       if (pathname === "/healthz") {
         if (request.method !== "GET" && request.method !== "HEAD")
           return new Response(null, { status: 405, headers: { Allow: "GET, HEAD" } });
@@ -319,6 +333,7 @@ export async function writeResponse(
 
 export async function startServer(options: ServerOptions = {}): Promise<Server> {
   const origin = publicUrl();
+  const basePath = serverBasePath();
   const handleRequest = createRequestHandler(options);
   const staticDir = resolve(options.staticDir ?? process.env.OOS_STATIC_DIR ?? "apps/web/out");
   if (!(await stat(staticDir)).isDirectory())
@@ -344,6 +359,7 @@ export async function startServer(options: ServerOptions = {}): Promise<Server> 
       const healthFromLoopback =
         pathname === "/healthz" &&
         ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.socket.remoteAddress ?? "");
+      pathname = stripBasePath(pathname, basePath) ?? pathname;
       let validHost = false;
       try {
         validHost = Boolean(
