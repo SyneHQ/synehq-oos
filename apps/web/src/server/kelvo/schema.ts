@@ -170,7 +170,7 @@ export async function inspectSchema(
     database: connection.database,
     schema: selectedSchema,
   };
-  const key = JSON.stringify([owner.id, owner.authVersion, target]);
+  const key = JSON.stringify([owner.id, owner.authVersion, owner.sessionId, target]);
   const stored = cache.get(key);
   if (!refresh && stored && stored.until > Date.now()) return stored.tables;
   const existing = pendingSchema.get(key);

@@ -1,3 +1,9 @@
+import {
+  managedMode,
+  managedConfig,
+  checkManagedAuthority,
+  type ManagedAuthority,
+} from "../hakopod";
 import { Prisma, PrismaClient, type Connection, type Execution } from "@prisma/client";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -148,7 +154,219 @@ export class AppStore {
     private readonly clock: () => Date = () => new Date(),
   ) {}
 
-  private connectionSummary(row: Connection): ConnectionSummary {
+  async importManagedConnections(input: unknown): Promise<void> {
+    const config = managedConfig();
+    const body = z
+      .object({
+        version: z.literal(1),
+        scope: z.literal(config.scope),
+        connections: z
+          .array(
+            z
+              .object({
+                source: z.string().regex(/^[a-f0-9]{32}$/),
+                fingerprint: digestSchema,
+                connection: connectionDraftSchema,
+              })
+              .strict(),
+          )
+          .max(64),
+      })
+      .strict()
+      .parse(input);
+    if (new Set(body.connections.map((item) => item.source)).size !== body.connections.length)
+      throw new StoreError(400, "Duplicate managed database source.");
+    const instance = await this.getInstance();
+    await this.transaction(async (tx) => {
+      const current = await tx.instance.findUniqueOrThrow({ where: { id: 1 } });
+      if (
+        (current.managedScope && current.managedScope !== config.scope) ||
+        (!current.managedScope && current.initializedAt)
+      )
+        throw new StoreError(409, "Use a separate installation for this Hakopod scope.");
+      if (!current.managedScope) {
+        await tx.owner.create({
+          data: {
+            id: OWNER_ID,
+            name: "Hakopod",
+            email: "managed@localhost",
+            passwordHash: "managed-login-only",
+          },
+        });
+        await tx.instance.update({
+          where: { id: 1 },
+          data: {
+            managedScope: config.scope,
+            initializedAt: this.clock(),
+            setupTokenHash: null,
+            setupExpiresAt: null,
+          },
+        });
+      }
+      const retained = await tx.connection.findMany({ where: { managedSource: { not: null } } });
+      for (const item of body.connections) {
+        const previous = retained.find((row) => row.managedSource === item.source);
+        if (previous?.managedFingerprint === item.fingerprint && !previous.deletedAt) continue;
+        const id = previous?.id ?? randomUUID();
+        const { host, password, tlsCa, ...fields } = item.connection;
+        const credentials = encryptSecret(
+          { host, password, tlsCa },
+          { installationId: instance.installationId, recordId: id, purpose: "connection" },
+          this.keys,
+        );
+        const data = {
+          ...fields,
+          host: "",
+          credentials,
+          managedSource: item.source,
+          managedFingerprint: item.fingerprint,
+          deletedAt: null,
+        };
+        if (previous) {
+          await tx.connection.update({
+            where: { id },
+            data: { ...data, revision: { increment: 1 } },
+          });
+          await tx.queryApproval.updateMany({
+            where: { connectionId: id, consumedAt: null },
+            data: { consumedAt: this.clock() },
+          });
+        } else await tx.connection.create({ data: { id, ownerId: OWNER_ID, ...data } });
+        await audit(tx, "hakopod-controller", "connection.sync", id);
+      }
+      for (const previous of retained) {
+        if (
+          previous.deletedAt ||
+          body.connections.some((item) => item.source === previous.managedSource)
+        )
+          continue;
+        await tx.connection.update({
+          where: { id: previous.id },
+          data: { deletedAt: this.clock(), revision: { increment: 1 } },
+        });
+        await tx.queryApproval.updateMany({
+          where: { connectionId: previous.id, consumedAt: null },
+          data: { consumedAt: this.clock() },
+        });
+        await audit(tx, "hakopod-controller", "connection.unlink", previous.id);
+      }
+    });
+  }
+
+  async managedIdentity(ticket: string): Promise<OwnerIdentity> {
+    const authority = await checkManagedAuthority(ticket);
+    const instance = await this.getInstance();
+    if (instance.managedScope !== authority.scope)
+      throw new StoreError(403, "This explorer belongs to another scope.");
+    const owner = await this.db.owner.findUniqueOrThrow({ where: { id: OWNER_ID } });
+    const now = this.clock();
+    const managedTicket = encryptSecret(
+      { ticket },
+      {
+        installationId: instance.installationId,
+        recordId: authority.session,
+        purpose: "hakopod-session",
+      },
+      this.keys,
+    );
+    const previous = await this.db.ownerSession.findUnique({ where: { id: authority.session } });
+    if (
+      previous &&
+      (previous.managedActor !== authority.actor ||
+        (previous.revokedAt && previous.authVersion === owner.authVersion))
+    )
+      unauthorized();
+    let refresh =
+      !previous ||
+      previous.authVersion !== owner.authVersion ||
+      now.getTime() - previous.lastSeenAt.getTime() >= 60_000;
+    if (!refresh && previous?.managedTicket) {
+      const retained = z.object({ ticket: z.string() }).parse(
+        decryptSecret(
+          previous.managedTicket,
+          {
+            installationId: instance.installationId,
+            recordId: authority.session,
+            purpose: "hakopod-session",
+          },
+          this.keys,
+        ),
+      );
+      refresh = retained.ticket !== ticket;
+    }
+    if (refresh)
+      await this.db.ownerSession.upsert({
+        where: { id: authority.session },
+        create: {
+          id: authority.session,
+          ownerId: OWNER_ID,
+          authVersion: owner.authVersion,
+          managedActor: authority.actor,
+          managedTicket,
+          lastSeenAt: now,
+          expiresAt: new Date(now.getTime() + SESSION_IDLE_MS),
+        },
+        update: {
+          managedTicket,
+          authVersion: owner.authVersion,
+          revokedAt: null,
+          lastSeenAt: now,
+          expiresAt: new Date(now.getTime() + SESSION_IDLE_MS),
+        },
+      });
+    return {
+      id: OWNER_ID,
+      name: authority.name,
+      email: authority.email,
+      actor: authority.actor,
+      canManage: authority.canManage,
+      canWrite: authority.canWrite,
+      sessionId: authority.session,
+      authVersion: owner.authVersion,
+    };
+  }
+
+  private async managedPermission(
+    db: Db,
+    identity: Pick<OwnerIdentity, "sessionId">,
+    source?: string | null,
+    fingerprint?: string | null,
+    write = false,
+    manage = false,
+  ): Promise<ManagedAuthority | undefined> {
+    if (!managedMode()) return;
+    const session = await db.ownerSession.findUnique({ where: { id: identity.sessionId } });
+    const instance = await db.instance.findUniqueOrThrow({ where: { id: 1 } });
+    if (
+      !session?.managedTicket ||
+      !session.managedActor ||
+      instance.managedScope !== managedConfig().scope
+    )
+      unauthorized();
+    const { ticket } = z.object({ ticket: z.string() }).parse(
+      decryptSecret(
+        session.managedTicket,
+        {
+          installationId: instance.installationId,
+          recordId: session.id,
+          purpose: "hakopod-session",
+        },
+        this.keys,
+      ),
+    );
+    const authority = await checkManagedAuthority(ticket, source, fingerprint, write, manage);
+    if (authority.actor !== session.managedActor || authority.session !== session.id)
+      unauthorized();
+    return authority;
+  }
+
+  private async sessionActor(db: Db, sessionId: string, fallback: string): Promise<string> {
+    return (
+      (await db.ownerSession.findUnique({ where: { id: sessionId } }))?.managedActor ?? fallback
+    );
+  }
+
+  private connectionSummary(row: Connection, owner?: OwnerIdentity): ConnectionSummary {
     if (!row.credentials) throw new StoreError(503, "Connection credentials are unavailable.");
     const installationId = existingInstallationId(this.keys);
     if (!installationId) throw new StoreError(503, "Connection credentials are unavailable.");
@@ -163,7 +381,11 @@ export class AppStore {
         this.keys,
       ),
     );
-    return summary(row, credentials.host);
+    return {
+      ...summary(row, credentials.host),
+      ...(row.managedSource ? { managed: true } : {}),
+      readOnly: row.readOnly || (managedMode() && owner?.canWrite !== true),
+    };
   }
 
   /** Convert legacy hosts before listeners open. Interrupted conversion can resume. */
@@ -486,6 +708,7 @@ export class AppStore {
     db: Db,
     identity: Pick<OwnerIdentity, "id" | "authVersion" | "sessionId">,
     allowMaintenance = false,
+    checkManaged = true,
   ): Promise<OwnerIdentity> {
     await configureMetadataClient(this.db);
     if (
@@ -511,9 +734,26 @@ export class AppStore {
     });
     const instance = await db.instance.findUnique({ where: { id: 1 } });
     if (!owner || !session || !instance?.initializedAt) unauthorized();
+    if (Boolean(instance.managedScope) !== managedMode()) unauthorized();
     if (instance.maintenance && !allowMaintenance)
       throw new StoreError(503, "The installation is in maintenance mode.", "MAINTENANCE");
-    return { ...ownerSummary(owner), authVersion: owner.authVersion, sessionId: session.id };
+    const authority = checkManaged
+      ? await this.managedPermission(db, { sessionId: session.id })
+      : undefined;
+    return {
+      ...ownerSummary(owner),
+      ...(authority
+        ? {
+            actor: authority.actor,
+            name: authority.name,
+            email: authority.email,
+            canManage: authority.canManage,
+            canWrite: authority.canWrite,
+          }
+        : {}),
+      authVersion: owner.authVersion,
+      sessionId: session.id,
+    };
   }
 
   async assertOwnerIdentity(
@@ -611,12 +851,15 @@ export class AppStore {
     id: string,
     expectedRevision?: number,
     allowDraft = false,
+    checkManaged = true,
   ): Promise<Connection> {
     idSchema.parse(id);
     const row = await db.connection.findFirst({
       where: { id, ownerId: owner.id, deletedAt: null },
     });
     if (!row) throw new StoreError(404, "Connection not found.");
+    if (checkManaged)
+      await this.managedPermission(db, owner, row.managedSource, row.managedFingerprint);
     if (row.draftExpiresAt && (!allowDraft || row.draftSessionId !== owner.sessionId))
       throw new StoreError(404, "Connection not found.");
     if (row.draftExpiresAt && row.draftExpiresAt <= this.clock())
@@ -642,12 +885,12 @@ export class AppStore {
         where: { ownerId: owner.id, deletedAt: null, draftExpiresAt: null },
         orderBy: { label: "asc" },
       })
-    ).map((row) => this.connectionSummary(row));
+    ).map((row) => this.connectionSummary(row, owner));
   }
 
   async getConnection(owner: OwnerIdentity, id: string): Promise<ConnectionSummary> {
     await this.checkOwner(this.db, owner);
-    return this.connectionSummary(await this.connection(this.db, owner, id));
+    return this.connectionSummary(await this.connection(this.db, owner, id), owner);
   }
 
   async createConnection(owner: OwnerIdentity, input: ConnectionInput): Promise<ConnectionSummary> {
@@ -680,6 +923,7 @@ export class AppStore {
     );
     return this.transaction(async (tx) => {
       await this.checkOwner(tx, owner);
+      await this.managedPermission(tx, owner, null, null, false, true);
       if (
         draft &&
         (await tx.connection.count({
@@ -706,7 +950,12 @@ export class AppStore {
             : {}),
         },
       });
-      await audit(tx, owner.id, draft ? "connection.test-draft.create" : "connection.create", id);
+      await audit(
+        tx,
+        await this.sessionActor(tx, owner.sessionId, owner.id),
+        draft ? "connection.test-draft.create" : "connection.create",
+        id,
+      );
       return this.connectionSummary(row);
     });
   }
@@ -718,6 +967,7 @@ export class AppStore {
   ): Promise<ConnectionSummary> {
     return this.transaction(async (tx) => {
       await this.checkOwner(tx, owner);
+      await this.managedPermission(tx, owner, null, null, false, true);
       const retained = await tx.connection.findFirst({
         where: { id: idSchema.parse(draftId), ownerId: owner.id },
       });
@@ -763,7 +1013,12 @@ export class AppStore {
         where: { id: draftId },
         data: { draftExpiresAt: null, draftSessionId: null },
       });
-      await audit(tx, owner.id, "connection.create", draftId);
+      await audit(
+        tx,
+        await this.sessionActor(tx, owner.sessionId, owner.id),
+        "connection.create",
+        draftId,
+      );
       return this.connectionSummary(saved);
     });
   }
@@ -791,7 +1046,12 @@ export class AppStore {
             revision: { increment: 1 },
           },
         });
-        await audit(tx, owner.id, "connection.test-draft.expire", connection.id);
+        await audit(
+          tx,
+          await this.sessionActor(tx, owner.sessionId, owner.id),
+          "connection.test-draft.expire",
+          connection.id,
+        );
       }
     });
   }
@@ -803,8 +1063,11 @@ export class AppStore {
   ): Promise<ConnectionSummary> {
     const update = connectionUpdateSchema.parse(input);
     const instance = await this.getInstance();
+    const managed = await this.db.connection.findUnique({ where: { id } });
+    if (managed?.managedSource) throw new StoreError(403, "Change this connection in Hakopod.");
     return this.transaction(async (tx) => {
       await this.checkOwner(tx, owner);
+      await this.managedPermission(tx, owner, null, null, false, true);
       const current = await this.connection(tx, owner, id, update.revision);
       const { revision, password, tlsCa, ...changes } = update;
       if (changes.engine && changes.engine !== current.engine)
@@ -855,14 +1118,22 @@ export class AppStore {
         where: { connectionId: id, consumedAt: null },
         data: { consumedAt: this.clock() },
       });
-      await audit(tx, owner.id, "connection.update", id);
+      await audit(
+        tx,
+        await this.sessionActor(tx, owner.sessionId, owner.id),
+        "connection.update",
+        id,
+      );
       return this.connectionSummary(await tx.connection.findUniqueOrThrow({ where: { id } }));
     });
   }
 
   async deleteConnection(owner: OwnerIdentity, id: string): Promise<void> {
+    const managed = await this.db.connection.findUnique({ where: { id } });
+    if (managed?.managedSource) throw new StoreError(403, "Change this connection in Hakopod.");
     await this.transaction(async (tx) => {
       await this.checkOwner(tx, owner);
+      await this.managedPermission(tx, owner, null, null, false, true);
       await this.connection(tx, owner, id);
       await tx.connection.update({
         where: { id },
@@ -872,7 +1143,12 @@ export class AppStore {
         where: { connectionId: id, consumedAt: null },
         data: { consumedAt: this.clock() },
       });
-      await audit(tx, owner.id, "connection.delete", id);
+      await audit(
+        tx,
+        await this.sessionActor(tx, owner.sessionId, owner.id),
+        "connection.delete",
+        id,
+      );
     });
   }
 
@@ -900,16 +1176,24 @@ export class AppStore {
   private async checkScope(
     db: Db,
     owner: OwnerIdentity,
-    scope: ExecutionScope,
+    scope: ExecutionScope & { write?: boolean },
   ): Promise<Connection> {
     scopeSchema.parse(scopeOnly(scope));
-    await this.checkOwner(db, owner);
+    await this.checkOwner(db, owner, false, false);
     const row = await this.connection(
       db,
       owner,
       scope.connectionId,
       scope.connectionRevision,
       true,
+      false,
+    );
+    await this.managedPermission(
+      db,
+      owner,
+      row.managedSource,
+      row.managedFingerprint,
+      scope.write ?? false,
     );
     const instance = await db.instance.findUniqueOrThrow({ where: { id: 1 } });
     if (instance.executionEpoch !== scope.executionEpoch)
@@ -934,7 +1218,7 @@ export class AppStore {
     const token = randomBytes(32).toString("base64url"),
       expiresAt = new Date(this.clock().getTime() + APPROVAL_AGE_MS);
     await this.transaction(async (tx) => {
-      const connection = await this.checkScope(tx, owner, scope);
+      const connection = await this.checkScope(tx, owner, { ...scope, write: true });
       if (connection.draftExpiresAt)
         throw new StoreError(403, "Save a verified connection before approving a write.");
       if (connection.readOnly)
@@ -954,7 +1238,12 @@ export class AppStore {
           expiresAt,
         },
       });
-      await audit(tx, owner.id, "query.approval.issue", scope.connectionId);
+      await audit(
+        tx,
+        await this.sessionActor(tx, owner.sessionId, owner.id),
+        "query.approval.issue",
+        scope.connectionId,
+      );
     });
     return { token, expiresAt, approvalId, operationId };
   }
@@ -1073,7 +1362,7 @@ export class AppStore {
       executionEpoch,
     };
     return this.transaction(async (tx) => {
-      const connection = await this.checkScope(tx, owner, scope);
+      const connection = await this.checkScope(tx, owner, { ...scope, write: body.write });
       if (connection.draftExpiresAt && request.kind !== "connection.test")
         throw new StoreError(403, "A connection test draft cannot execute queries.");
       if (
@@ -1133,7 +1422,13 @@ export class AppStore {
             completedAt: now,
           },
         });
-        await audit(tx, owner.id, "query.expired-before-dispatch", row.operationId, "failed");
+        await audit(
+          tx,
+          await this.sessionActor(tx, owner.sessionId, owner.id),
+          "query.expired-before-dispatch",
+          row.operationId,
+          "failed",
+        );
       }
       // A transport deadline does not prove that the database operation stopped.
       const active = activeExecutions(owner.id);
@@ -1195,7 +1490,7 @@ export class AppStore {
       });
       await audit(
         tx,
-        owner.id,
+        await this.sessionActor(tx, owner.sessionId, owner.id),
         body.write ? "query.write.approved" : "query.read.request",
         body.operationId,
       );
@@ -1316,7 +1611,12 @@ export class AppStore {
         ) / 1000,
       );
       const result = await publish(authorityValidUntil);
-      await audit(tx, row.ownerId, "sqlite.publication", row.operationId);
+      await audit(
+        tx,
+        await this.sessionActor(tx, row.sessionId, row.ownerId),
+        "sqlite.publication",
+        row.operationId,
+      );
       return result;
     });
   }
@@ -1508,7 +1808,13 @@ export class AppStore {
             "Kelvo did not admit this operation because capacity is unavailable. No database operation ran.",
         },
       });
-      await audit(tx, owner.id, "query.not-admitted", operationId, "failed");
+      await audit(
+        tx,
+        await this.sessionActor(tx, owner.sessionId, owner.id),
+        "query.not-admitted",
+        operationId,
+        "failed",
+      );
       return record;
     });
   }
@@ -1570,7 +1876,13 @@ export class AppStore {
           completedAt: now,
         },
       });
-      await audit(tx, owner.id, `query.${status}`, operationId, status);
+      await audit(
+        tx,
+        await this.sessionActor(tx, owner.sessionId, owner.id),
+        `query.${status}`,
+        operationId,
+        status,
+      );
       return record;
     });
   }
@@ -1613,7 +1925,13 @@ export class AppStore {
           completedAt: terminalStatuses.has(update.status) ? this.clock() : null,
         },
       });
-      await audit(tx, owner.id, `query.${update.status}`, operationId, update.status);
+      await audit(
+        tx,
+        await this.sessionActor(tx, owner.sessionId, owner.id),
+        `query.${update.status}`,
+        operationId,
+        update.status,
+      );
       return record;
     });
   }
@@ -1659,6 +1977,7 @@ export class AppStore {
     const instance = await this.getInstance();
     return this.transaction(async (tx) => {
       await this.checkOwner(tx, owner);
+      await this.managedPermission(tx, owner, null, null, false, true);
       const current = await tx.aiSettings.findUnique({ where: { id: "ai" } });
       if (current && body.revision !== current.revision)
         throw new StoreError(409, "AI settings changed. Refresh before saving.");
@@ -1692,7 +2011,12 @@ export class AppStore {
           revision: { increment: 1 },
         },
       });
-      await audit(tx, owner.id, "ai.settings.change", "ai");
+      await audit(
+        tx,
+        await this.sessionActor(tx, owner.sessionId, owner.id),
+        "ai.settings.change",
+        "ai",
+      );
       return {
         enabled: row.enabled,
         endpoint: row.endpoint,
@@ -1777,7 +2101,12 @@ export class AppStore {
         create: { id, ownerId: owner.id, ...fields },
         update: fields,
       });
-      await audit(tx, owner.id, "query.snippet.save", id);
+      await audit(
+        tx,
+        await this.sessionActor(tx, owner.sessionId, owner.id),
+        "query.snippet.save",
+        id,
+      );
       return row;
     });
   }
@@ -1790,7 +2119,12 @@ export class AppStore {
         data: { deletedAt: this.clock() },
       });
       if (changed.count !== 1) throw new StoreError(404, "SQL snippet not found.");
-      await audit(tx, owner.id, "query.snippet.delete", id);
+      await audit(
+        tx,
+        await this.sessionActor(tx, owner.sessionId, owner.id),
+        "query.snippet.delete",
+        id,
+      );
     });
   }
 

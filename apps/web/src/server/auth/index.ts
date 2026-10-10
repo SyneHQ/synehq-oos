@@ -1,3 +1,5 @@
+import { managedMode } from "../hakopod";
+import { appStore } from "../store";
 import { Auth, type AuthConfig } from "@auth/core";
 import type { DefaultSession, Session } from "@auth/core/types";
 import Credentials from "@auth/core/providers/credentials";
@@ -143,12 +145,15 @@ export function sessionConfig(): AuthConfig {
 }
 
 export function authHandler(request: Request): Promise<Response> {
+  if (managedMode()) return Promise.resolve(new Response(null, { status: 404 }));
   return Auth(request, sessionConfig());
 }
 
 export const handlers = { GET: authHandler, POST: authHandler };
 
 export async function currentOwner(request: Request): Promise<OwnerIdentity | null> {
+  if (managedMode())
+    return appStore().managedIdentity(request.headers.get("x-hakopod-explorer-ticket") ?? "");
   const sessionResponse = await Auth(
     new Request(new URL(applicationPath("/api/auth/session", serverBasePath()), publicUrl()), {
       headers: { cookie: request.headers.get("cookie") ?? "" },
