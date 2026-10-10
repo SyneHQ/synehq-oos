@@ -40,10 +40,12 @@ The Dockerfile pins its Node, Go, and Distroless base images by digest. CI build
 
 The `Check` workflow builds the complete container after the web checks pass. Pull requests build the image without a registry login or push. A push to `main` builds and publishes these tags:
 
-| Image tag                                         | Use                                                           |
-| ------------------------------------------------- | ------------------------------------------------------------- |
-| `ghcr.io/synehq/synehq-oos:edge`                  | The latest successful build from `main`. This tag can change. |
-| `ghcr.io/synehq/synehq-oos:sha-<full-commit-sha>` | The build for a specific OOS source commit.                   |
+| Image tag                                                 | Use                                                           |
+| --------------------------------------------------------- | ------------------------------------------------------------- |
+| `ghcr.io/synehq/synehq-oos:edge`                          | The latest successful build from `main`. This tag can change. |
+| `ghcr.io/synehq/synehq-oos:sha-<full-commit-sha>`         | The build for a specific OOS source commit.                   |
+| `ghcr.io/synehq/synehq-oos:edge-hakopod`                  | The latest successful `/synehq` build from `main`.            |
+| `ghcr.io/synehq/synehq-oos:sha-<full-commit-sha>-hakopod` | The `/synehq` build for a specific OOS source commit.         |
 
 The workflow reads `deploy/kelvo-revision` and supplies that public Git commit as the `kelvo_source` build context. It builds `linux/amd64` and `linux/arm64` with separate caches. Both native runtime checks must pass before the publication job creates the shared tags. Docker selects the matching image when you pull a shared tag. It authenticates to GHCR with the job's `GITHUB_TOKEN`; no personal access token is required.
 
@@ -61,6 +63,10 @@ Use a matching source checkout for the launcher. For repeatable installations, r
 An image publication is not a qualified release or a deployment. The workflow does not publish a `latest` tag, start a service, or update an existing installation. See the [validation record](validation.md) for remaining release checks.
 
 Architecture-specific images also have `sha-<full-commit-sha>-amd64` and `sha-<full-commit-sha>-arm64` tags. A failed architecture keeps the previous shared `edge` tag unchanged.
+
+Hakopod images add `-hakopod` before the architecture suffix. Both path variants use the same Docker host requirements.
+The prefixed image keeps the normal OOS owner login. Shared Hakopod login and automatic connection import remain incomplete.
+See the [Hakopod integration plan](hakopod-integration.md) for the remaining work.
 
 ## Start the installation
 
