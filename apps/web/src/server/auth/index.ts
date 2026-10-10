@@ -1,6 +1,7 @@
 import { Auth, type AuthConfig } from "@auth/core";
 import type { DefaultSession, Session } from "@auth/core/types";
 import Credentials from "@auth/core/providers/credentials";
+import { applicationPath, normalizeBasePath, stripBasePath } from "../../paths";
 import { runtimeIdentity } from "../crypto/keyring";
 import {
   assertOwnerIdentity,
@@ -18,6 +19,10 @@ declare module "@auth/core/types" {
   interface Session {
     user: DefaultSession["user"] & { id: string; authVersion: number; sessionId: string };
   }
+}
+
+export function serverBasePath() {
+  return normalizeBasePath(process.env.OOS_BASE_PATH ?? process.env.NEXT_PUBLIC_OOS_BASE_PATH);
 }
 
 export function publicUrl(): URL {
@@ -42,23 +47,33 @@ export function publicUrl(): URL {
 export function sessionConfig(): AuthConfig {
   if (typeof window !== "undefined") throw new Error("Authentication is server-only.");
   const origin = publicUrl();
+  const basePath = serverBasePath();
+  const cookiePath = applicationPath("/", basePath);
+  const cookiePrefix = origin.protocol === "https:" ? (basePath ? "__Secure-" : "__Host-") : "";
+  const cookieOptions = {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    path: cookiePath,
+    secure: origin.protocol === "https:",
+  };
   return {
-    basePath: "/api/auth",
+    basePath: applicationPath("/api/auth", basePath),
     secret: runtimeIdentity().sessionSecret,
     trustHost: true,
     session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 },
-    pages: { signIn: "/login" },
+    pages: { signIn: applicationPath("/login", basePath) },
     useSecureCookies: origin.protocol === "https:",
     cookies: {
       sessionToken: {
-        name: origin.protocol === "https:" ? "__Host-oos.session-token" : "oos.session-token",
-        options: {
-          httpOnly: true,
-          sameSite: "lax",
-          path: "/",
-          secure: origin.protocol === "https:",
-        },
+        name: `${cookiePrefix}oos.session-token`,
+        options: cookieOptions,
       },
+      ...(basePath
+        ? {
+            csrfToken: { name: `${cookiePrefix}oos.csrf-token`, options: cookieOptions },
+            callbackUrl: { name: `${cookiePrefix}oos.callback-url`, options: cookieOptions },
+          }
+        : {}),
     },
     providers: [
       Credentials({
@@ -108,7 +123,9 @@ export function sessionConfig(): AuthConfig {
       },
       redirect({ url }) {
         const target = new URL(url, origin);
-        return target.origin === origin.origin ? target.toString() : origin.toString();
+        return target.origin === origin.origin && stripBasePath(target.pathname, basePath) !== null
+          ? target.toString()
+          : new URL(cookiePath, origin).toString();
       },
     },
     events: {
@@ -133,7 +150,7 @@ export const handlers = { GET: authHandler, POST: authHandler };
 
 export async function currentOwner(request: Request): Promise<OwnerIdentity | null> {
   const sessionResponse = await Auth(
-    new Request(new URL("/api/auth/session", publicUrl()), {
+    new Request(new URL(applicationPath("/api/auth/session", serverBasePath()), publicUrl()), {
       headers: { cookie: request.headers.get("cookie") ?? "" },
       signal: request.signal,
     }),

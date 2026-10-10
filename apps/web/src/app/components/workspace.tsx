@@ -1,5 +1,7 @@
 "use client";
 
+import { applicationPath } from "../../paths";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
@@ -122,7 +124,7 @@ export function Workspace({
       const session = await api<{ owner: OwnerSummary | null }>("/api/session", { signal });
       if (!session.owner) {
         const setup = await api<{ initialized: boolean }>("/api/setup", { signal });
-        window.location.replace(setup.initialized ? "/login/" : "/setup/");
+        window.location.replace(applicationPath(setup.initialized ? "/login/" : "/setup/"));
         return;
       }
       const data = await api<{ connections: ConnectionSummary[] }>("/api/connections", {
@@ -147,7 +149,7 @@ export function Workspace({
     setSignOutError("");
     try {
       await signOutOwner();
-      window.location.replace("/login/");
+      window.location.replace(applicationPath("/login/"));
     } catch (cause) {
       setSignOutError(errorMessage(cause));
     } finally {
@@ -223,7 +225,7 @@ export function Workspace({
         <div className="header-context">
           <a
             className="header-brand"
-            href="/connections"
+            href={applicationPath("/connections")}
             aria-label="SyneHQ OOS home"
             aria-disabled={navigationLocked || undefined}
           >
@@ -259,7 +261,7 @@ export function Workspace({
                   className="connection-switcher-item"
                 >
                   <a
-                    href={`/explorer/${encodeURIComponent(item.id)}`}
+                    href={applicationPath(`/explorer/${encodeURIComponent(item.id)}`)}
                     aria-current={connectionId === item.id ? "page" : undefined}
                   >
                     <DatabaseIcon engine={item.engine} size={24} />
@@ -287,7 +289,7 @@ export function Workspace({
         </div>
         <nav className="header-nav" aria-label="Main navigation">
           <a
-            href="/connections"
+            href={applicationPath("/connections")}
             className={!connectionId ? "active" : ""}
             aria-current={!connectionId ? "page" : undefined}
             aria-disabled={navigationLocked || undefined}
@@ -367,7 +369,7 @@ export function Workspace({
               <Database />
               <h2>Connection not found.</h2>
               <p>The connection may have been removed.</p>
-              <a href="/connections">Back to connections</a>
+              <a href={applicationPath("/connections")}>Back to connections</a>
             </div>
           )
         ) : (
@@ -423,7 +425,9 @@ export function Workspace({
                       </span>
                     </div>
                     <h2>
-                      <a href={`/explorer/${encodeURIComponent(item.id)}`}>{item.label}</a>
+                      <a href={applicationPath(`/explorer/${encodeURIComponent(item.id)}`)}>
+                        {item.label}
+                      </a>
                     </h2>
                     <p className="connection-engine">{engineName(item.engine)}</p>
                     <dl>
@@ -478,7 +482,7 @@ export function Workspace({
                       </button>
                       <a
                         className="open-connection"
-                        href={`/explorer/${encodeURIComponent(item.id)}`}
+                        href={applicationPath(`/explorer/${encodeURIComponent(item.id)}`)}
                       >
                         Open explorer
                         <ArrowRight size={14} />

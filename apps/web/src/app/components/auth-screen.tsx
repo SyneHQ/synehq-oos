@@ -1,5 +1,7 @@
 "use client";
 
+import { applicationPath } from "../../paths";
+
 import { useEffect, useState, type FormEvent } from "react";
 import Image from "next/image";
 import { Eye, EyeOff } from "lucide-react";
@@ -22,11 +24,11 @@ export function AuthScreen({ mode }: { mode: "setup" | "login" }) {
       .then((state) => {
         if (!active) return;
         if (setup && state.initialized) {
-          window.location.replace("/login/");
+          window.location.replace(applicationPath("/login/"));
           return;
         }
         if (!setup && !state.initialized) {
-          window.location.replace("/setup/");
+          window.location.replace(applicationPath("/setup/"));
           return;
         }
         setAllowSignup(state.allowSignup);
@@ -59,10 +61,10 @@ export function AuthScreen({ mode }: { mode: "setup" | "login" }) {
             password: fields.get("password"),
           }),
         });
-        window.location.replace("/login/");
+        window.location.replace(applicationPath("/login/"));
       } else {
         await signInOwner(String(fields.get("email") ?? ""), String(fields.get("password") ?? ""));
-        window.location.replace("/connections/");
+        window.location.replace(applicationPath("/connections/"));
       }
     } catch (cause) {
       setError(errorMessage(cause));
@@ -173,7 +175,7 @@ export function AuthScreen({ mode }: { mode: "setup" | "login" }) {
       </main>
       <aside className="login-visual" aria-label="SyneHQ OOS">
         <Image
-          src="/auth-portrait.jpg"
+          src={applicationPath("/auth-portrait.jpg")}
           alt=""
           fill
           priority

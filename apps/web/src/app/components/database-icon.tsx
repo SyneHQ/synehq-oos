@@ -1,3 +1,4 @@
+import { applicationPath } from "../../paths";
 import type { DatabaseEngine } from "@synehq-oos/explorer-contracts";
 import { databaseDefinition } from "./database-catalog";
 
@@ -17,7 +18,7 @@ export function DatabaseIcon({
       aria-hidden="true"
     >
       <img
-        src={databaseDefinition(engine).logo}
+        src={applicationPath(databaseDefinition(engine).logo)}
         alt=""
         width={size}
         height={size}

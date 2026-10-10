@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1.7
+ARG OOS_BASE_PATH=""
 FROM node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS web-build
+ARG OOS_BASE_PATH
 WORKDIR /source
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_PUBLIC_OOS_BASE_PATH=$OOS_BASE_PATH
 RUN apt-get update && apt-get install --no-install-recommends -y openssl tini && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/package.json
@@ -33,6 +36,8 @@ COPY deploy/certificates/ /certificates/
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/oos-runtime /certificates/main.go
 
 FROM gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f AS runtime
+ARG OOS_BASE_PATH
+ENV OOS_BASE_PATH=$OOS_BASE_PATH
 WORKDIR /app
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \

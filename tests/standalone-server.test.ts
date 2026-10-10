@@ -23,6 +23,7 @@ import {
 } from "../apps/web/src/server/runtime";
 import { appStore } from "../apps/web/src/server/store";
 import { metadataClient } from "../apps/web/src/server/store/database";
+import { sessionConfig } from "../apps/web/src/server/auth";
 
 const origin = "http://localhost:3100";
 
@@ -190,11 +191,14 @@ test("standalone HTTP bridge preserves separate Set-Cookie headers", async () =>
 });
 
 test("standalone Auth.js retains owner setup, CSRF, session revocation, and approval guards", async (t) => {
+  const basePath = process.env.OOS_TEST_BASE_PATH ?? "";
   const directory = mkdtempSync(join(process.env.OOS_TEST_TMPDIR ?? tmpdir(), "oos-http-auth-"));
   const publicDir = join(directory, "public");
   mkdirSync(publicDir);
   writeFileSync(join(publicDir, "index.html"), "Dashboard");
+  writeFileSync(join(publicDir, "oos-build.json"), JSON.stringify({ basePath }));
   const variables = {
+    OOS_BASE_PATH: basePath,
     AUTH_URL: origin,
     OOS_KEY_DIR: join(directory, "keys"),
     DATABASE_URL: `file:${join(directory, "metadata.sqlite")}`,
@@ -229,7 +233,7 @@ test("standalone Auth.js retains owner setup, CSRF, session revocation, and appr
     form = false,
     headers: Record<string, string> = {},
   ) {
-    const result = await request(server, path, {
+    const result = await request(server, basePath + path, {
       method,
       headers: {
         Origin: origin,
@@ -254,6 +258,7 @@ test("standalone Auth.js retains owner setup, CSRF, session revocation, and appr
     return { ...result, json: JSON.parse(result.body) };
   }
   assert.equal((await call("/api/connections")).status, 401);
+  if (basePath) assert.equal((await request(server, "/api/connections")).status, 404);
   const setup = await appStore().issueSetupToken();
   const owner = {
     token: setup.token,
@@ -271,7 +276,7 @@ test("standalone Auth.js retains owner setup, CSRF, session revocation, and appr
   const rejected = await call(
     "/api/auth/callback/credentials",
     "POST",
-    { email: owner.email, password: owner.password, callbackUrl: "/connections/" },
+    { email: owner.email, password: owner.password, callbackUrl: basePath + "/connections/" },
     true,
     { "X-Auth-Return-Redirect": "1" },
   );
@@ -280,16 +285,22 @@ test("standalone Auth.js retains owner setup, CSRF, session revocation, and appr
   const login = await call(
     "/api/auth/callback/credentials",
     "POST",
-    { email: owner.email, password: owner.password, csrfToken: csrf, callbackUrl: "/connections/" },
+    {
+      email: owner.email,
+      password: owner.password,
+      csrfToken: csrf,
+      callbackUrl: basePath + "/connections/",
+    },
     true,
     { "X-Auth-Return-Redirect": "1" },
   );
-  assert.equal(login.json.url, origin + "/connections/");
+  assert.equal(login.json.url, origin + basePath + "/connections/");
   assert.ok(
     login.headers["set-cookie"]?.some(
       (cookie) =>
         cookie.startsWith("oos.session-token=") &&
         cookie.includes("HttpOnly") &&
+        cookie.includes(`Path=${basePath}/;`) &&
         cookie.includes("SameSite=Lax"),
     ),
   );
@@ -311,7 +322,7 @@ test("standalone Auth.js retains owner setup, CSRF, session revocation, and appr
   });
   assert.equal(write.status, 403);
   assert.match(write.json.error, /Review and confirm/);
-  const oversized = await request(server, "/api/rows/execute", {
+  const oversized = await request(server, basePath + "/api/rows/execute", {
     method: "POST",
     headers: { Origin: origin, Cookie: cookieHeader(), "Content-Type": "application/json" },
     body: "x".repeat(256 * 1024 + 1),
@@ -321,10 +332,16 @@ test("standalone Auth.js retains owner setup, CSRF, session revocation, and appr
   assert.equal(JSON.parse(oversized.body).notSubmitted, true);
   assert.equal(
     (
-      await call("/api/auth/signout", "POST", { csrfToken: csrf, callbackUrl: "/login/" }, true, {
-        Origin: "http://outside.test",
-        "X-Auth-Return-Redirect": "1",
-      })
+      await call(
+        "/api/auth/signout",
+        "POST",
+        { csrfToken: csrf, callbackUrl: basePath + "/login/" },
+        true,
+        {
+          Origin: "http://outside.test",
+          "X-Auth-Return-Redirect": "1",
+        },
+      )
     ).status,
     403,
   );
@@ -332,14 +349,36 @@ test("standalone Auth.js retains owner setup, CSRF, session revocation, and appr
   const logout = await call(
     "/api/auth/signout",
     "POST",
-    { csrfToken: csrf, callbackUrl: "/login/" },
+    { csrfToken: csrf, callbackUrl: basePath + "/login/" },
     true,
     { "X-Auth-Return-Redirect": "1" },
   );
-  assert.equal(logout.json.url, origin + "/login/");
+  assert.equal(logout.json.url, origin + basePath + "/login/");
   assert.equal((await call("/api/session")).json.owner, null);
   assert.equal(
     (await call("/api/session", "GET", undefined, false, { Cookie: oldSession })).json.owner,
     null,
   );
+  process.env.AUTH_URL = "https://hakopod.example.test";
+  try {
+    const config = sessionConfig();
+    const cookie = config.cookies?.sessionToken;
+    assert.equal(cookie?.name, `${basePath ? "__Secure-" : "__Host-"}oos.session-token`);
+    assert.equal(cookie?.options?.path, basePath + "/");
+    assert.equal(cookie?.options?.secure, true);
+    const redirect = config.callbacks?.redirect;
+    assert.ok(redirect);
+    const baseUrl = process.env.AUTH_URL;
+    assert.equal(
+      await redirect({ url: basePath + "/connections/", baseUrl }),
+      baseUrl + basePath + "/connections/",
+    );
+    for (const url of [
+      "https://outside.test/",
+      ...(basePath ? ["/connections/", "/synehq-other/", "/synehq/../login/"] : []),
+    ])
+      assert.equal(await redirect({ url, baseUrl }), baseUrl + basePath + "/");
+  } finally {
+    process.env.AUTH_URL = origin;
+  }
 });

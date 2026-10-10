@@ -1,15 +1,15 @@
 "use client";
 
 import Editor, { loader, type OnMount } from "@monaco-editor/react";
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type * as monaco from "monaco-editor";
 import { EditorOptions } from "./options";
 import { createSelectionExecutor } from "./selection";
 import { createUnifiedCompletionService } from "./completion";
 import type { CompletionColumn } from "./types";
 
-// The host serves these version-pinned assets. The editor never uses a public CDN.
-loader.config({ paths: { vs: "/monaco/vs" } });
+// The host provides a fixed asset path for this page. No public CDN is used.
+export const EditorAssetPath = createContext("/monaco/vs");
 
 export interface CodeEditorProps {
   value: string;
@@ -37,6 +37,7 @@ export function CodeEditor({
   onSelectionChange,
   schemaColumns = [],
 }: CodeEditorProps) {
+  const assetPath = useContext(EditorAssetPath);
   const [mounted, setMounted] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const live = useRef({ readOnly, onRun, onSelectionChange, schemaColumns });
@@ -44,6 +45,7 @@ export function CodeEditor({
   const disposables = useRef<monaco.IDisposable[]>([]);
   useEffect(() => {
     let active = true;
+    loader.config({ paths: { vs: assetPath } });
     loader
       .init()
       .then(() => {
@@ -57,7 +59,7 @@ export function CodeEditor({
       disposables.current.forEach((item) => item.dispose());
       disposables.current = [];
     };
-  }, []);
+  }, [assetPath]);
   const onMount: OnMount = (editor, m) => {
     disposables.current.forEach((item) => item.dispose());
     disposables.current = [
