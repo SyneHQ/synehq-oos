@@ -103,7 +103,7 @@ ECharts 5.6.0 uses Apache-2.0. Keep its license and notice files during distribu
 
 ## Container build and runtime
 
-- GitHub Actions uses Docker's `setup-buildx-action` v3, `login-action` v3, and `build-push-action` v6 to build the full image, reuse build cache, and publish main-branch images to GHCR. These are CI tools and add no runtime dependencies.
+- GitHub Actions uses Docker's `setup-buildx-action` v3, `login-action` v3, and `build-push-action` v6 to build the full image, reuse build cache, and publish main-branch images to GHCR. The workflow also uses `upload-artifact` v4 and `download-artifact` v4 to transfer verified image digests between native build jobs and the manifest job. These are CI tools and add no runtime dependencies.
 - `esbuild` `0.25.12` bundles server code before deployment. It was already present through the test runner. A direct pin makes the build dependency explicit.
 - The container uses Node `24.21.0`, Go `1.26.8`, and Distroless Debian 12 base images pinned by digest in the Dockerfile.
 - Tini forwards signals and reaps orphan processes. This is needed because one container runs Node, Kelvo, and temporary query workers.

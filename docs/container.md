@@ -34,7 +34,7 @@ docker buildx build \
 
 The image builds the dashboard as static files. It compiles the backend to JavaScript and Kelvo to native binaries. Build tools remain in the build stages.
 
-The Dockerfile pins its Node, Go, and Distroless base images by digest. The current qualification covers `linux/amd64`.
+The Dockerfile pins its Node, Go, and Distroless base images by digest. CI builds each image on a native runner for `linux/amd64` or `linux/arm64`. Each runner checks owner setup, a SQLite query through Kelvo, clean shutdown, and persisted restart. The six-engine live acceptance record remains separate.
 
 ## GitHub container builds
 
@@ -45,7 +45,7 @@ The `Check` workflow builds the complete container after the web checks pass. Pu
 | `ghcr.io/synehq/synehq-oos:edge`                  | The latest successful build from `main`. This tag can change. |
 | `ghcr.io/synehq/synehq-oos:sha-<full-commit-sha>` | The build for a specific OOS source commit.                   |
 
-The workflow reads `deploy/kelvo-revision` and supplies that public Git commit as the `kelvo_source` build context. It builds `linux/amd64` and reuses the GitHub Actions build cache. It authenticates to GHCR with the job's `GITHUB_TOKEN`; no personal access token is required.
+The workflow reads `deploy/kelvo-revision` and supplies that public Git commit as the `kelvo_source` build context. It builds `linux/amd64` and `linux/arm64` with separate caches. Both native runtime checks must pass before the publication job creates the shared tags. Docker selects the matching image when you pull a shared tag. It authenticates to GHCR with the job's `GITHUB_TOKEN`; no personal access token is required.
 
 After the first publication, a repository administrator must check the GHCR package visibility. Set it to public to allow anonymous pulls. A public source repository does not automatically make its container package public.
 
@@ -59,6 +59,8 @@ sudo sh deploy/run-container.sh ghcr.io/synehq/synehq-oos:edge
 Use a matching source checkout for the launcher. For repeatable installations, record the image digest and pass `ghcr.io/synehq/synehq-oos@sha256:<digest>` to the launcher. Commit tags identify source; a digest pins the image content.
 
 An image publication is not a qualified release or a deployment. The workflow does not publish a `latest` tag, start a service, or update an existing installation. See the [validation record](validation.md) for remaining release checks.
+
+Architecture-specific images also have `sha-<full-commit-sha>-amd64` and `sha-<full-commit-sha>-arm64` tags. A failed architecture keeps the previous shared `edge` tag unchanged.
 
 ## Start the installation
 
