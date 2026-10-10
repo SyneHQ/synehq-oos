@@ -1,3 +1,5 @@
+import { stripBasePath } from "../../paths";
+
 export interface ExplorerLocation {
   connectionId: string;
   initialView: "data" | "console";
@@ -10,7 +12,9 @@ export function readExplorerLocation(location: {
   pathname: string;
   search: string;
 }): ExplorerLocation | null {
-  const path = /^\/explorer\/([^/]+)(?:\/(console))?\/?$/.exec(location.pathname);
+  const pathname = stripBasePath(location.pathname);
+  if (pathname === null) return null;
+  const path = /^\/explorer\/([^/]+)(?:\/(console))?\/?$/.exec(pathname);
   if (path) {
     let connectionId: string;
     try {
@@ -21,7 +25,7 @@ export function readExplorerLocation(location: {
     if (!connectionIdPattern.test(connectionId)) return null;
     return { connectionId, initialView: path[2] ? "console" : "data" };
   }
-  if (!/^\/explorer\/?$/.test(location.pathname)) return null;
+  if (!/^\/explorer\/?$/.test(pathname)) return null;
   const query = new URLSearchParams(location.search);
   const connectionId = query.get("connection");
   const view = query.get("view");

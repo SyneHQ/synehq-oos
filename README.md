@@ -80,6 +80,8 @@ Use a Linux `amd64` host with cgroup v2, Landlock ABI 3 or later, and Docker's s
 
 For development without Docker, use the [source installation guide](docs/development.md).
 
+Hakopod integration is in progress. Read the [integration plan](docs/hakopod-integration.md) for `/synehq/` builds, access boundaries, and remaining work.
+
 The public installer and release images are not ready. Read the [operations guide](docs/operations.md) for backup, restore, recovery, and key rotation.
 
 The owner setup supports two paths:

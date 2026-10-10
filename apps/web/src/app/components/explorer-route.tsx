@@ -1,5 +1,7 @@
 "use client";
 
+import { applicationPath } from "../../paths";
+
 import { useEffect, useState } from "react";
 import { Spinner } from "@synehq-oos/ui";
 import { Brand } from "./brand";
@@ -24,7 +26,7 @@ export function ExplorerRoute() {
       <div className="boot-screen">
         <Brand />
         <p>Select a saved connection to open the explorer.</p>
-        <a href="/connections/">Back to connections</a>
+        <a href={applicationPath("/connections/")}>Back to connections</a>
       </div>
     );
   return <Workspace connectionId={route.connectionId} initialView={route.initialView} />;

@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
+import { normalizeBasePath } from "./src/paths";
 const config: NextConfig = {
+  basePath: normalizeBasePath(process.env.NEXT_PUBLIC_OOS_BASE_PATH),
   output: "export",
   trailingSlash: true,
   images: { unoptimized: true },

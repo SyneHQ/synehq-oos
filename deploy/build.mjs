@@ -48,4 +48,10 @@ await build({
   await writeFile("dist/metafile.json", JSON.stringify(metafile, null, 2));
 });
 await cp("apps/web/prisma/migrations", "dist/migrations", { recursive: true });
+await writeFile(
+  "apps/web/out/oos-build.json",
+  JSON.stringify({
+    basePath: process.env.NEXT_PUBLIC_OOS_BASE_PATH ?? "",
+  }),
+);
 await compressStatic("apps/web/out");

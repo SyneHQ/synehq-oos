@@ -1,3 +1,5 @@
+import { applicationPath } from "../../paths";
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -11,7 +13,7 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(applicationPath(path), {
     ...options,
     credentials: "same-origin",
     cache: "no-store",
