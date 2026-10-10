@@ -76,7 +76,7 @@ The web app stores its own settings in SQLite. It does not require Infisical, Re
 
 Read the [single-container guide](docs/container.md) for the image build and Linux host requirements. The runtime uses a Distroless image and serves a static dashboard.
 
-Use a Linux `amd64` host with cgroup v2, Landlock ABI 3 or later, and Docker's systemd cgroup driver. Source builds need Buildx. Initial cgroup setup needs administrator access. Docker Desktop and rootless Docker are not qualified.
+Use a Linux `amd64` or `arm64` host with cgroup v2, Landlock ABI 3 or later, and Docker's systemd cgroup driver. Source builds need Buildx. Initial cgroup setup needs administrator access. Docker Desktop and rootless Docker are not qualified.
 
 For development without Docker, use the [source installation guide](docs/development.md).
 
