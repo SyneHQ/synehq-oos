@@ -118,7 +118,9 @@ The browser loads static HTML, scripts, and styles. One Node process handles log
 
 The container has no Next.js server, shell, npm, or TypeScript runner. Static assets are compressed at build time. Database workers start when needed.
 
-Node.js encrypts database credentials and provider keys with AES-256-GCM. The installation keeps encryption keys separate from session and service keys.
+Node.js encrypts database hosts, passwords, and provider keys with AES-256-GCM. The installation keeps encryption keys separate from session and service keys.
+
+The signed-in owner can view connection hosts. Ports, database names, usernames, and connection labels remain plain metadata.
 
 An interrupted request can have an unknown outcome. The console shows this state and lets you check the operation. It does not repeat the write automatically.
 

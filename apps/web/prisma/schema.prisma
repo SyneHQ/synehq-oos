@@ -14,6 +14,7 @@ model Instance {
   setupTokenHash String?
   setupExpiresAt DateTime?
   executionEpoch String
+  hostEncryptionVersion Int @default(0)
   maintenance    Boolean   @default(false)
   maintenanceReason String?
   historyEnabled Boolean   @default(true)

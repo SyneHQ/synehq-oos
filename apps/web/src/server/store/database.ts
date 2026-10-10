@@ -9,6 +9,7 @@ export function configureMetadataClient(db: PrismaClient): Promise<void> {
     ready = (async () => {
       await db.$queryRawUnsafe("PRAGMA journal_mode = WAL");
       await db.$queryRawUnsafe("PRAGMA busy_timeout = 10000");
+      await db.$queryRawUnsafe("PRAGMA secure_delete = ON");
     })();
     configured.set(db, ready);
     void ready.catch(() => configured.delete(db));

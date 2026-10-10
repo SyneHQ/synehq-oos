@@ -16,7 +16,7 @@ test("bundled migrations initialize once and preserve an existing installation",
     const before = db
       .prepare("SELECT checksum FROM _prisma_migrations ORDER BY migration_name")
       .all();
-    assert.equal(before.length, 4);
+    assert.equal(before.length, 5);
     db.close();
     migrateMetadata(path, migrations);
     const after = new DatabaseSync(path);
@@ -29,6 +29,12 @@ test("bundled migrations initialize once and preserve an existing installation",
         .prepare("PRAGMA table_info(Connection)")
         .all()
         .some((row) => row.name === "filePath"),
+    );
+    assert.ok(
+      after
+        .prepare("PRAGMA table_info(Instance)")
+        .all()
+        .some((row) => row.name === "hostEncryptionVersion" && row.dflt_value === "0"),
     );
     after.close();
   } finally {
