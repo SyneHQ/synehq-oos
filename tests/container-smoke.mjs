@@ -7,6 +7,8 @@ import { setTimeout as delay } from "node:timers/promises";
 assert.equal(process.env.CI, "true");
 assert.ok(["amd64", "arm64"].includes(process.env.EXPECTED_ARCH));
 const origin = "http://127.0.0.1:3100";
+const basePath = process.env.OOS_BASE_PATH ?? "";
+assert.ok(["", "/synehq"].includes(basePath));
 const cookies = new Map();
 const docker = (...args) =>
   execFileSync("docker", args, {
@@ -36,7 +38,7 @@ async function healthy() {
 }
 
 async function api(path, method = "GET", input, form = false) {
-  const response = await fetch(`http://127.0.0.1:3100${path}`, {
+  const response = await fetch(`${origin}${basePath}${path}`, {
     method,
     redirect: "manual",
     signal: AbortSignal.timeout(45_000),
@@ -52,6 +54,10 @@ async function api(path, method = "GET", input, form = false) {
     body: input ? (form ? new URLSearchParams(input) : JSON.stringify(input)) : undefined,
   });
   for (const value of response.headers.getSetCookie()) {
+    assert.ok(
+      value.includes(`Path=${basePath}/;`),
+      "Authentication cookies must use the configured application path.",
+    );
     const entry = value.split(";", 1)[0];
     const separator = entry.indexOf("=");
     cookies.set(entry.slice(0, separator), entry.slice(separator + 1));
@@ -73,6 +79,27 @@ async function complete(initial) {
 }
 
 await healthy();
+const login = await fetch(`${origin}${basePath}/login/`, { signal: AbortSignal.timeout(5000) });
+assert.equal(login.status, 200);
+const page = await login.text();
+const assets = [...page.matchAll(/(?:src|href)="([^" ]+\.(?:js|css)(?:\?[^" ]*)?)"/g)];
+assert.ok(assets.length > 0, "The login page must reference static assets.");
+for (const [, path] of assets) {
+  assert.ok(path.startsWith(`${basePath}/_next/`));
+  const asset = await fetch(`${origin}${path}`, { signal: AbortSignal.timeout(5000) });
+  assert.equal(asset.status, 200, "The static asset must be available at the configured path.");
+  await asset.arrayBuffer();
+}
+if (basePath) {
+  for (const path of ["/api/setup", "/api/session", "/login/"]) {
+    const response = await fetch(`${origin}${path}`, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(5000),
+    });
+    await response.text();
+    assert.equal(response.status, 404, "Bare routes must not bypass the application prefix.");
+  }
+}
 assert.equal((await api("/api/setup")).initialized, false);
 const setup = docker(
   "exec",
@@ -94,7 +121,7 @@ await api(
     email,
     password,
     csrfToken: csrf.csrfToken,
-    callbackUrl: "/connections/",
+    callbackUrl: `${basePath}/connections/`,
   },
   true,
 );
@@ -150,5 +177,5 @@ await readFixture();
 docker("stop", "--time", "90", "synehq-oos");
 assert.equal(docker("inspect", "synehq-oos", "--format", "{{.State.ExitCode}}"), "0");
 console.log(
-  `Verified ${process.env.EXPECTED_ARCH}: owner setup, SQLite query, clean shutdown, and persisted restart.`,
+  `Verified ${process.env.EXPECTED_ARCH} at ${basePath || "/"}: static assets, owner setup, SQLite query, clean shutdown, and persisted restart.`,
 );

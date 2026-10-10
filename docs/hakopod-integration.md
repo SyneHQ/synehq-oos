@@ -39,7 +39,19 @@ Links, callbacks, API requests, cookies, database logos, and Monaco assets use t
 
 The internal `/healthz` endpoint remains available for container health checks. The prefixed build still requires its own owner login until the Hakopod session adapter exists.
 
-The normal GHCR tags currently build root mode. The Hakopod release must pin a verified prefixed image digest for each supported architecture.
+The container workflow builds both root mode and `/synehq` mode on native AMD64 and ARM64 runners.
+Each build must pass static asset, owner login, SQLite query, shutdown, and restart checks before publication.
+
+After a successful main run, GHCR publishes these tags:
+
+| Mode         | Moving tag     | Commit tag             |
+| ------------ | -------------- | ---------------------- |
+| Standalone   | `edge`         | `sha-<commit>`         |
+| Hakopod path | `edge-hakopod` | `sha-<commit>-hakopod` |
+
+Each tag contains both architectures. Pull-request builds do not publish images.
+The Hakopod release must pin the tested prefixed image digest.
+The prefixed image still requires the OOS owner login. It does not provide automatic import or shared Hakopod login.
 
 ### Verification
 
