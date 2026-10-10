@@ -6,7 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 // Run only against the disposable container created by the GitHub runner.
 assert.equal(process.env.CI, "true");
 assert.ok(["amd64", "arm64"].includes(process.env.EXPECTED_ARCH));
-const origin = "http://localhost:3100";
+const origin = "http://127.0.0.1:3100";
 const cookies = new Map();
 const docker = (...args) =>
   execFileSync("docker", args, {
@@ -24,7 +24,7 @@ async function healthy() {
   for (let attempt = 0; attempt < 90; attempt++) {
     try {
       const response = await fetch("http://127.0.0.1:3100/healthz", {
-        headers: { Host: "localhost:3100" },
+        headers: { Host: "127.0.0.1:3100" },
         signal: AbortSignal.timeout(2000),
       });
       await response.text();
@@ -41,7 +41,7 @@ async function api(path, method = "GET", input, form = false) {
     redirect: "manual",
     signal: AbortSignal.timeout(45_000),
     headers: {
-      Host: "localhost:3100",
+      Host: "127.0.0.1:3100",
       Origin: origin,
       Cookie: [...cookies].map(([key, value]) => `${key}=${value}`).join("; "),
       ...(input
