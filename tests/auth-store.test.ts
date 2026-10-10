@@ -7,7 +7,12 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { PrismaClient } from "@prisma/client";
 import { AppStore } from "../apps/web/src/server/store/core";
-import { activateEncryptionKey, runtimeIdentity } from "../apps/web/src/server/crypto/keyring";
+import {
+  activateEncryptionKey,
+  encryptSecret,
+  runtimeIdentity,
+} from "../apps/web/src/server/crypto/keyring";
+import { sourceDescriptor } from "../apps/web/src/server/kelvo/resolver";
 import {
   encodeOperation,
   operationDigest,
@@ -36,6 +41,111 @@ const connectionInput: ConnectionInput = {
   tlsMode: "verify-full",
   readOnly: true,
 };
+
+test("hosts stay encrypted through drafts, edits, resolution, and key rotation", async (t) => {
+  const f = await ownerFixture(t);
+  const saved = await f.store.createConnection(f.owner, connectionInput);
+  const draft = await f.store.createConnectionDraft(f.owner, connectionInput);
+  for (const item of [saved, draft]) {
+    const row = await f.db.connection.findUniqueOrThrow({ where: { id: item.id } });
+    assert.equal(row.host, "");
+    assert.equal(JSON.stringify(row).includes(connectionInput.host!), false);
+    assert.equal((await f.store.decryptConnection(f.owner, item.id)).host, connectionInput.host);
+  }
+  assert.equal((await f.store.listConnections(f.owner))[0].host, connectionInput.host);
+  const changed = await f.store.updateConnection(f.owner, saved.id, {
+    revision: saved.revision,
+    host: "new-database.internal",
+  });
+  assert.equal(changed.host, "new-database.internal");
+  const row = await f.db.connection.findUniqueOrThrow({ where: { id: saved.id } });
+  assert.equal(row.host, "");
+  assert.equal(JSON.stringify(row).includes("new-database.internal"), false);
+  await f.store.rotateSecrets();
+  const resolved = await f.store.decryptConnection(f.owner, saved.id);
+  assert.equal(resolved.host, "new-database.internal");
+  assert.equal(resolved.password, connectionInput.password);
+  assert.match(JSON.stringify(sourceDescriptor(resolved).secrets), /new-database\.internal/);
+  await f.db.connection.update({
+    where: { id: saved.id },
+    data: { credentials: row.credentials!.slice(1) },
+  });
+  await assert.rejects(f.store.listConnections(f.owner), /could not be decrypted/);
+});
+
+test("startup encrypts legacy hosts and removes plain hosts from SQLite and its WAL", async (t) => {
+  const f = await ownerFixture(t);
+  const saved = await f.store.createConnection(f.owner, connectionInput);
+  const removed = await f.store.createConnection(f.owner, connectionInput);
+  await f.store.deleteConnection(f.owner, removed.id);
+  const instance = await f.store.getInstance();
+  const scope = {
+    installationId: instance.installationId,
+    recordId: saved.id,
+    purpose: "connection",
+  };
+  await f.db.connection.update({
+    where: { id: saved.id },
+    data: {
+      host: "legacy-secret-host.internal",
+      credentials: encryptSecret({ password: "legacy-password" }, scope, f.keys),
+    },
+  });
+  await f.db.connection.update({
+    where: { id: removed.id },
+    data: { host: "deleted-secret-host.internal" },
+  });
+  await f.db.instance.update({ where: { id: 1 }, data: { hostEncryptionVersion: 0 } });
+  await f.store.initializeMetadata();
+  const resolved = await f.store.decryptConnection(f.owner, saved.id);
+  assert.equal(resolved.host, "legacy-secret-host.internal");
+  assert.equal(resolved.password, "legacy-password");
+  assert.equal(resolved.revision, saved.revision);
+  assert.equal((await f.store.getInstance()).hostEncryptionVersion, 1);
+  for (const row of await f.db.connection.findMany()) assert.equal(row.host, "");
+  const before = (await f.db.connection.findUniqueOrThrow({ where: { id: saved.id } })).credentials;
+  await f.store.initializeMetadata();
+  assert.equal(
+    (await f.db.connection.findUniqueOrThrow({ where: { id: saved.id } })).credentials,
+    before,
+  );
+  for (const path of [f.path, `${f.path}-wal`]) {
+    const bytes = readFileSync(path);
+    assert.equal(bytes.includes(Buffer.from("legacy-secret-host.internal")), false);
+    assert.equal(bytes.includes(Buffer.from("deleted-secret-host.internal")), false);
+  }
+});
+
+test("host migration refuses corrupt secrets and resumes converted records", async (t) => {
+  const f = await ownerFixture(t);
+  const saved = await f.store.createConnection(f.owner, connectionInput);
+  const row = await f.db.connection.findUniqueOrThrow({ where: { id: saved.id } });
+  await f.db.instance.update({ where: { id: 1 }, data: { hostEncryptionVersion: 0 } });
+  await f.db.connection.update({
+    where: { id: saved.id },
+    data: { credentials: "corrupt", host: "old.internal" },
+  });
+  await assert.rejects(f.store.initializeMetadata(), /could not be decrypted/);
+  assert.equal(
+    (await f.db.instance.findUniqueOrThrow({ where: { id: 1 } })).hostEncryptionVersion,
+    0,
+  );
+  assert.equal(
+    (await f.db.connection.findUniqueOrThrow({ where: { id: saved.id } })).host,
+    "old.internal",
+  );
+  await f.db.connection.update({
+    where: { id: saved.id },
+    data: { credentials: row.credentials, host: "" },
+  });
+  await f.db.instance.update({
+    where: { id: 1 },
+    data: { maintenance: true, maintenanceReason: "host-encryption" },
+  });
+  await f.store.initializeMetadata();
+  assert.equal((await f.store.getConnection(f.owner, saved.id)).host, connectionInput.host);
+  assert.equal((await f.store.getInstance()).maintenance, false);
+});
 
 test("connection drafts stay private and require the exact successful test receipt", async (t) => {
   const f = await ownerFixture(t);

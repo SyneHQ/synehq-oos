@@ -57,6 +57,7 @@ const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const idSchema = z.string().min(1).max(128);
 const credentialsSchema = z
   .object({
+    host: z.string().max(253),
     password: z.string().max(8192),
     tlsCa: z.string().max(16384).optional(),
     tlsClientCert: z.string().max(16384).optional(),
@@ -84,12 +85,12 @@ function activeExecutions(ownerId: string): Prisma.ExecutionWhereInput {
   };
 }
 
-function summary(row: Connection): ConnectionSummary {
+function summary(row: Connection, host: string): ConnectionSummary {
   return {
     id: row.id,
     label: row.label,
     engine: row.engine as ConnectionSummary["engine"],
-    host: row.host,
+    host,
     port: row.port,
     database: row.database,
     username: row.username,
@@ -147,6 +148,107 @@ export class AppStore {
     private readonly clock: () => Date = () => new Date(),
   ) {}
 
+  private connectionSummary(row: Connection): ConnectionSummary {
+    if (!row.credentials) throw new StoreError(503, "Connection credentials are unavailable.");
+    const installationId = existingInstallationId(this.keys);
+    if (!installationId) throw new StoreError(503, "Connection credentials are unavailable.");
+    const credentials = credentialsSchema.parse(
+      decryptSecret(
+        row.credentials,
+        {
+          installationId,
+          recordId: row.id,
+          purpose: "connection",
+        },
+        this.keys,
+      ),
+    );
+    return summary(row, credentials.host);
+  }
+
+  /** Convert legacy hosts before listeners open. Interrupted conversion can resume. */
+  private async migrateConnectionHosts(installationId: string): Promise<void> {
+    const instance = await this.db.instance.findUniqueOrThrow({ where: { id: 1 } });
+    if (instance.hostEncryptionVersion === 1) return;
+    if (instance.hostEncryptionVersion !== 0)
+      throw new StoreError(503, "Host encryption requires a newer application version.");
+    await this.transaction(async (tx) => {
+      const locked = await tx.instance.updateMany({
+        where: {
+          id: 1,
+          hostEncryptionVersion: 0,
+          OR: [{ maintenance: false }, { maintenanceReason: "host-encryption" }],
+        },
+        data: { maintenance: true, maintenanceReason: "host-encryption" },
+      });
+      if (locked.count !== 1)
+        throw new StoreError(503, "Finish maintenance before migrating connection hosts.");
+      if (await tx.execution.count({ where: activeExecutions(OWNER_ID) }))
+        throw new StoreError(
+          503,
+          "Resolve unfinished operations before migrating connection hosts.",
+        );
+      let cursor: string | undefined;
+      for (;;) {
+        const rows = await tx.connection.findMany({
+          orderBy: { id: "asc" },
+          take: 100,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        });
+        if (!rows.length) break;
+        for (const row of rows) {
+          if (row.deletedAt) {
+            await tx.connection.update({
+              where: { id: row.id },
+              data: { host: "", credentials: null },
+            });
+            continue;
+          }
+          if (!row.credentials)
+            throw new StoreError(503, "Connection credentials are unavailable.");
+          const scope = { installationId, recordId: row.id, purpose: "connection" };
+          const stored = decryptSecret(row.credentials, scope, this.keys);
+          const migrated = credentialsSchema.safeParse(stored);
+          const credentials = migrated.success
+            ? migrated.data
+            : {
+                ...credentialsSchema.omit({ host: true }).parse(stored),
+                host: row.host,
+              };
+          await tx.connection.update({
+            where: { id: row.id },
+            data: {
+              host: "",
+              credentials: encryptSecret(credentialsSchema.parse(credentials), scope, this.keys),
+            },
+          });
+        }
+        cursor = rows[rows.length - 1].id;
+      }
+    });
+    // Remove old SQLite pages and WAL entries before marking conversion complete.
+    await this.db.$executeRawUnsafe("VACUUM");
+    const checkpoint = await this.db.$queryRawUnsafe<Array<{ busy: number | bigint }>>(
+      "PRAGMA wal_checkpoint(TRUNCATE)",
+    );
+    if (Number(checkpoint[0]?.busy) !== 0)
+      throw new StoreError(
+        503,
+        "Close other metadata connections before completing host encryption.",
+      );
+    await this.transaction(async (tx) => {
+      await tx.instance.update({
+        where: { id: 1 },
+        data: {
+          hostEncryptionVersion: 1,
+          maintenance: false,
+          maintenanceReason: null,
+        },
+      });
+      await audit(tx, "local-operator", "connection.hosts.encrypt", installationId);
+    });
+  }
+
   private async transaction<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
     await configureMetadataClient(this.db);
     return this.db.$transaction(work, {
@@ -174,6 +276,7 @@ export class AppStore {
     const existing = await this.db.instance.findUnique({ where: { id: 1 } });
     if (existing) {
       runtimeIdentity(existing.installationId, this.keys);
+      await this.migrateConnectionHosts(existing.installationId);
       return { installationId: existing.installationId };
     }
     if ((await this.db.owner.count()) || (await this.db.connection.count())) {
@@ -186,7 +289,9 @@ export class AppStore {
     const installationId = existingInstallationId(this.keys) ?? randomUUID();
     initializeRuntimeKeys(installationId, this.keys);
     await this.transaction(async (tx) => {
-      await tx.instance.create({ data: { id: 1, installationId, executionEpoch: randomUUID() } });
+      await tx.instance.create({
+        data: { id: 1, installationId, executionEpoch: randomUUID(), hostEncryptionVersion: 1 },
+      });
       await audit(tx, "local-operator", "installation.initialize", installationId);
     });
     return { installationId };
@@ -537,12 +642,12 @@ export class AppStore {
         where: { ownerId: owner.id, deletedAt: null, draftExpiresAt: null },
         orderBy: { label: "asc" },
       })
-    ).map(summary);
+    ).map((row) => this.connectionSummary(row));
   }
 
   async getConnection(owner: OwnerIdentity, id: string): Promise<ConnectionSummary> {
     await this.checkOwner(this.db, owner);
-    return summary(await this.connection(this.db, owner, id));
+    return this.connectionSummary(await this.connection(this.db, owner, id));
   }
 
   async createConnection(owner: OwnerIdentity, input: ConnectionInput): Promise<ConnectionSummary> {
@@ -567,9 +672,9 @@ export class AppStore {
     const body = connectionDraftSchema.parse(input);
     const instance = await this.getInstance(),
       id = randomUUID();
-    const { password = "", tlsCa, ...fields } = body;
+    const { host, password = "", tlsCa, ...fields } = body;
     const credentials = encryptSecret(
-      { password, tlsCa },
+      { host, password, tlsCa },
       { installationId: instance.installationId, recordId: id, purpose: "connection" },
       this.keys,
     );
@@ -591,6 +696,7 @@ export class AppStore {
           id,
           ownerId: owner.id,
           ...fields,
+          host: "",
           credentials,
           ...(draft
             ? {
@@ -601,7 +707,7 @@ export class AppStore {
         },
       });
       await audit(tx, owner.id, draft ? "connection.test-draft.create" : "connection.create", id);
-      return summary(row);
+      return this.connectionSummary(row);
     });
   }
 
@@ -652,13 +758,13 @@ export class AppStore {
           "The installation state changed. Test the connection again.",
           "CONNECTION_TEST_REQUIRED",
         );
-      if (!connection.draftExpiresAt) return summary(connection);
+      if (!connection.draftExpiresAt) return this.connectionSummary(connection);
       const saved = await tx.connection.update({
         where: { id: draftId },
         data: { draftExpiresAt: null, draftSessionId: null },
       });
       await audit(tx, owner.id, "connection.create", draftId);
-      return summary(saved);
+      return this.connectionSummary(saved);
     });
   }
 
@@ -678,7 +784,12 @@ export class AppStore {
           continue;
         await tx.connection.update({
           where: { id: connection.id },
-          data: { deletedAt: this.clock(), credentials: null, revision: { increment: 1 } },
+          data: {
+            deletedAt: this.clock(),
+            host: "",
+            credentials: null,
+            revision: { increment: 1 },
+          },
         });
         await audit(tx, owner.id, "connection.test-draft.expire", connection.id);
       }
@@ -706,7 +817,7 @@ export class AppStore {
         revision: _revision,
         hasSecret: _hasSecret,
         ...previousFields
-      } = summary(current);
+      } = this.connectionSummary(current);
       const {
         password: _password,
         tlsCa: _tlsCa,
@@ -714,11 +825,12 @@ export class AppStore {
       } = connectionDraftSchema.parse({ ...previousFields, ...changes, password, tlsCa });
       const fields = {
         ...normalized,
+        host: "",
         authSource: normalized.authSource ?? null,
         serviceName: normalized.serviceName ?? null,
         filePath: normalized.filePath ?? null,
       };
-      const secretFields = { password, tlsCa };
+      const secretFields = { host: normalized.host, password, tlsCa };
       let credentials = current.credentials;
       if (Object.values(secretFields).some((value) => value !== undefined)) {
         if (!credentials) throw new StoreError(503, "Connection credentials are unavailable.");
@@ -744,7 +856,7 @@ export class AppStore {
         data: { consumedAt: this.clock() },
       });
       await audit(tx, owner.id, "connection.update", id);
-      return summary(await tx.connection.findUniqueOrThrow({ where: { id } }));
+      return this.connectionSummary(await tx.connection.findUniqueOrThrow({ where: { id } }));
     });
   }
 
@@ -754,7 +866,7 @@ export class AppStore {
       await this.connection(tx, owner, id);
       await tx.connection.update({
         where: { id },
-        data: { deletedAt: this.clock(), credentials: null, revision: { increment: 1 } },
+        data: { deletedAt: this.clock(), host: "", credentials: null, revision: { increment: 1 } },
       });
       await tx.queryApproval.updateMany({
         where: { connectionId: id, consumedAt: null },
@@ -781,7 +893,7 @@ export class AppStore {
           this.keys,
         ),
       );
-      return { ...summary(row), ...credentials };
+      return { ...summary(row, credentials.host), ...credentials };
     });
   }
 

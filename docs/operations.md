@@ -167,6 +167,26 @@ Restart the services and sign in with the new password. Never place the password
 
 ## Rotate encryption keys
 
+Connection hosts share the encrypted payload with database passwords. Rotation includes both fields.
+
+### Upgrade older connection records
+
+The container encrypts existing connection hosts before opening its listeners. It also clears the old host column, including deleted records.
+
+The migration preserves connection IDs and revisions. It keeps the same target, so it does not invalidate saved queries.
+
+Stop older processes and resolve unfinished operations before upgrading. Keep enough free disk space for SQLite to rebuild the metadata file.
+
+For a source installation, apply the reviewed schema migrations with `npm run db:deploy`. Then run `node dist/operator.mjs init` with the matching build and configuration.
+
+The migration rebuilds SQLite pages and truncates its write-ahead log. A failed conversion blocks startup and can resume with the same image and keys.
+
+Existing backups, filesystem snapshots, and storage-level copies can still contain old plain hosts. This migration does not erase those copies.
+
+Older images cannot read the new encrypted host payload. Use a matching backup and its keys if you must restore an older image.
+
+### Run rotation
+
 Create a coordinated backup first. Stop all three services before rotation.
 
 Run:
