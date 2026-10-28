@@ -123,6 +123,29 @@ jobs:
         run: |
           docker rm -f synehq-oos || true
           docker volume rm synehq-oos-data || true
+      # A restricted Kubernetes pod: default seccomp, no delegated cgroup.
+      - name: Check Kubernetes pod mode
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}${{ matrix.suffix }}-${{ matrix.arch }}
+          EXPECTED_ARCH: ${{ matrix.arch }}
+          OOS_BASE_PATH: ${{ matrix.base_path }}
+        run: |
+          docker run -d --name synehq-oos \
+            --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+            --pids-limit=256 --memory=768m --memory-swap=768m --cpus=2 \
+            --tmpfs=/tmp:rw,noexec,nosuid,nodev,size=32m,mode=1777 \
+            --mount=type=volume,source=synehq-oos-data,target=/data \
+            -p 127.0.0.1:3100:3100 -e AUTH_URL=http://127.0.0.1:3100 -e OOS_RUNTIME=kubernetes \
+            "$IMAGE"
+          node tests/container-smoke.mjs
+      - name: Show failed pod-mode logs
+        if: failure()
+        run: docker logs --tail 100 synehq-oos || true
+      - name: Remove pod-mode container and volume
+        if: always()
+        run: |
+          docker rm -f synehq-oos || true
+          docker volume rm synehq-oos-data || true
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3

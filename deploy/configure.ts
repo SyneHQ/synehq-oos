@@ -13,13 +13,15 @@ import {
 } from "node:fs";
 import { join, resolve, isAbsolute } from "node:path";
 import { keyDirectory, runtimeIdentity } from "../apps/web/src/server/crypto/keyring";
+import { kubernetesRuntime } from "../apps/web/src/server/hakopod";
 import { serviceScope, sha256 } from "../packages/kelvo-client/src/protocol";
 
 export function configure(options: { preserveExisting?: boolean; compact?: boolean } = {}): void {
   const directory = resolve(process.env.OOS_DATA_DIR ?? "data");
   const bin = resolve(process.env.KELVO_BIN_DIR ?? "bin");
-  const cgroup = process.env.KELVO_CGROUP_ROOT;
-  if (!cgroup || !isAbsolute(cgroup) || cgroup === "/")
+  const podContained = kubernetesRuntime();
+  const cgroup = podContained ? undefined : process.env.KELVO_CGROUP_ROOT;
+  if (!podContained && (!cgroup || !isAbsolute(cgroup) || cgroup === "/"))
     throw new Error("Set KELVO_CGROUP_ROOT to a delegated, empty cgroup directory.");
   const identity = runtimeIdentity();
   const scope = serviceScope(identity.installationId);
@@ -170,15 +172,17 @@ export function configure(options: { preserveExisting?: boolean; compact?: boole
       overhead_mb: 256,
       scratch_mb: 128,
     },
-    containment: {
-      root: cgroup,
-      state_directory: join(directory, "containment"),
-      max_groups: 2,
-      cleanup_timeout: "5s",
-      native_overhead_mb: 64,
-      parent_overhead_mb: 64,
-      max_processes: 64,
-    },
+    containment: podContained
+      ? undefined
+      : {
+          root: cgroup,
+          state_directory: join(directory, "containment"),
+          max_groups: 2,
+          cleanup_timeout: "5s",
+          native_overhead_mb: 64,
+          parent_overhead_mb: 64,
+          max_processes: 64,
+        },
     max_retained: 512,
     retention: "1h",
     max_concurrent: 2,
@@ -196,8 +200,10 @@ export function configure(options: { preserveExisting?: boolean; compact?: boole
       overhead_mb: 192,
       scratch_mb: 64,
     };
-    config.containment.max_groups = 1;
-    config.containment.parent_overhead_mb = 64;
+    if (config.containment) {
+      config.containment.max_groups = 1;
+      config.containment.parent_overhead_mb = 64;
+    }
     config.max_concurrent = 1;
   }
   const configPath = join(directory, "application.yml");
