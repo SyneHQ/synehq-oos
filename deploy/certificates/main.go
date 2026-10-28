@@ -210,6 +210,15 @@ func prepare(dir, scope string) error {
 	return nil
 }
 
+// In a Kubernetes pod the volume root belongs to root with the pod's fsGroup
+// (mode 2775), so the service user cannot make it private. Accept it only in
+// pod mode, when its group is ours and nobody else can write to it.
+func kubernetesVolumeRoot(info os.FileInfo, chmodErr error) bool {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return ok && os.Getenv("OOS_RUNTIME") == "kubernetes" && errors.Is(chmodErr, os.ErrPermission) &&
+		stat.Gid == uint32(os.Getegid()) && info.Mode().Perm()&0o002 == 0
+}
+
 func lockAndExec(directory string, command []string) error {
 	if !filepath.IsAbs(directory) || len(command) < 1 || !filepath.IsAbs(command[0]) {
 		return errors.New("invalid runtime path")
@@ -218,7 +227,7 @@ func lockAndExec(directory string, command []string) error {
 	if err != nil || !s.IsDir() || s.Mode()&os.ModeSymlink != 0 {
 		return errors.New("invalid data volume")
 	}
-	if err = os.Chmod(directory, 0700); err != nil {
+	if err = os.Chmod(directory, 0700); err != nil && !kubernetesVolumeRoot(s, err) {
 		return err
 	}
 	fd, err := syscall.Open(filepath.Join(directory, ".runtime.lock"), syscall.O_RDWR|syscall.O_CREAT|syscall.O_NOFOLLOW, 0600)

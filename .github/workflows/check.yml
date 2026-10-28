@@ -130,11 +130,14 @@ jobs:
           EXPECTED_ARCH: ${{ matrix.arch }}
           OOS_BASE_PATH: ${{ matrix.base_path }}
         run: |
+          # Like a Kubernetes volume with fsGroup 65532: root-owned, group-writable, setgid.
+          docker volume create synehq-oos-data
+          docker run --rm -v synehq-oos-data:/v busybox:1.37.0 sh -c 'chown 0:65532 /v && chmod 2775 /v'
           docker run -d --name synehq-oos \
             --read-only --cap-drop=ALL --security-opt=no-new-privileges \
             --pids-limit=256 --memory=768m --memory-swap=768m --cpus=2 \
             --tmpfs=/tmp:rw,noexec,nosuid,nodev,size=32m,mode=1777 \
-            --mount=type=volume,source=synehq-oos-data,target=/data \
+            --mount=type=volume,source=synehq-oos-data,target=/data,volume-nocopy \
             -p 127.0.0.1:3100:3100 -e AUTH_URL=http://127.0.0.1:3100 -e OOS_RUNTIME=kubernetes \
             "$IMAGE"
           node tests/container-smoke.mjs
