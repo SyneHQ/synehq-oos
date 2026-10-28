@@ -28,6 +28,7 @@ A restricted Kubernetes pod cannot be given a delegated cgroup subtree, so Kelvo
 
 - Kelvo starts without its `containment` configuration. Query workers have no per-query memory, CPU, or process cgroup. The pod's own limits are the only boundary, so one runaway query can restart the whole explorer. Give the pod at least 768 MiB of memory.
 - Landlock, the worker seccomp filter, non-root execution, and the read-only root filesystem still apply.
+- The data volume root may be owned by root and writable by the pod's `fsGroup`, which is the pod's own group. OOS and Kelvo accept it only when nobody else can write to it, and every directory and file they create below it is still private.
 - The Hakopod key file may be group-readable, because kubelet adds group read for the pod's `fsGroup` to mounted secret files. Group write and any access for other users are still rejected.
 
 Any other `OOS_RUNTIME` value stops startup. Leave it unset everywhere else. An existing installation cannot switch between modes; start pod mode with new metadata.
