@@ -4,6 +4,15 @@ import { z } from "zod";
 import { StoreError } from "./store/errors";
 
 export const managedMode = () => process.env.OOS_HAKOPOD_SCOPE !== undefined;
+// OOS_RUNTIME=kubernetes is an explicit opt-in for a Kubernetes pod. The pod's
+// memory, CPU and process limits contain Kelvo instead of per-query cgroups,
+// because a restricted pod cannot be given a delegated cgroup subtree.
+export function kubernetesRuntime() {
+  const runtime = process.env.OOS_RUNTIME;
+  if (runtime === undefined || runtime === "") return false;
+  if (runtime === "kubernetes") return true;
+  throw new Error("OOS_RUNTIME must be unset or kubernetes.");
+}
 export function managedConfig() {
   const scope = process.env.OOS_HAKOPOD_SCOPE;
   const file = process.env.OOS_HAKOPOD_KEY_FILE;
@@ -22,7 +31,8 @@ export function managedConfig() {
     )
   )
     throw new StoreError(503, "The Hakopod authority requires HTTPS or loopback HTTP.");
-  if ((statSync(file).mode & 0o077) !== 0)
+  // Kubelet adds group read for the pod's fsGroup to mounted secret files.
+  if ((statSync(file).mode & (kubernetesRuntime() ? 0o037 : 0o077)) !== 0)
     throw new StoreError(503, "The Hakopod key file must be private.");
   const key = readFileSync(file, "utf8").trim();
   if (!/^[a-f0-9]{64}$/.test(key))

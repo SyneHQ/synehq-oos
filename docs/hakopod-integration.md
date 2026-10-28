@@ -20,7 +20,17 @@ The authority URL must use HTTPS. Loopback HTTP is allowed on the same host. The
 
 Start with new metadata. Managed mode cannot take over an existing standalone owner. The first authenticated source sync creates a managed owner record with no password login. The scope is then fixed in metadata. Local signup and password login are unavailable in managed mode.
 
-Use the normal containment launcher and its reviewed deployment controls. Environment variables alone do not make a Kubernetes pod compatible with Kelvo. The existing restricted-pod probe failed its containment checks; Kubernetes deployment remains unqualified.
+On a Docker host, use the normal containment launcher and its reviewed deployment controls.
+
+## Kubernetes pod mode
+
+A restricted Kubernetes pod cannot be given a delegated cgroup subtree, so Kelvo's per-query cgroups are unavailable there. Set `OOS_RUNTIME=kubernetes` to opt in to pod mode:
+
+- Kelvo starts without its `containment` configuration. Query workers have no per-query memory, CPU, or process cgroup. The pod's own limits are the only boundary, so one runaway query can restart the whole explorer. Give the pod at least 768 MiB of memory.
+- Landlock, the worker seccomp filter, non-root execution, and the read-only root filesystem still apply.
+- The Hakopod key file may be group-readable, because kubelet adds group read for the pod's `fsGroup` to mounted secret files. Group write and any access for other users are still rejected.
+
+Any other `OOS_RUNTIME` value stops startup. Leave it unset everywhere else. An existing installation cannot switch between modes; start pod mode with new metadata.
 
 ## Private protocol
 
