@@ -1,4 +1,4 @@
-import { managedMode } from "../apps/web/src/server/hakopod";
+import { kubernetesRuntime, managedMode } from "../apps/web/src/server/hakopod";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -111,6 +111,8 @@ async function main() {
         KELVO_TOKEN: runtimeIdentity().serviceToken,
         GOMEMLIMIT: "192MiB",
         GOMAXPROCS: "2",
+        // A Kubernetes volume root is root-owned and writable by the pod's fsGroup.
+        ...(kubernetesRuntime() ? { KELVO_TRUST_OWN_GROUP_ANCESTORS: "1" } : {}),
       },
     },
   );
